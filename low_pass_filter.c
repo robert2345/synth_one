@@ -3,17 +3,17 @@
 #include "low_pass_filter.h"
 
 // Source https://cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf
-float v2 = 0;
-float g = 0;
-float v1 = 0;
-float ic2eq = 0;
-float ic1eq = 0;
-float a2 = 0;
-float a1 = 0.0;
-int cutoff = 4000;
+static float v2 = 0;
+static float g = 0;
+static float v1 = 0;
+static float ic2eq = 0;
+static float ic1eq = 0;
+static float a2 = 0;
+static float a1 = 0.0;
+static int cutoff = 4000;
 
 
-void low_pass_filter_get_configure(float cut_freq, float res, int samplerate)
+void low_pass_filter_configure(float cut_freq, float res, int samplerate)
 {
 	cutoff = cut_freq;
 	g = tan(M_PI * cutoff / samplerate);

@@ -19,6 +19,9 @@
 #define X_STEP (5)
 #define WAVEFORM_LEN (WIDTH/X_STEP)
 
+#define min(x, y) ((x) < (y) ? x : y)
+#define max(x, y) ((x) < (y) ? y : x)
+
 static bool abort = false;
 
 static void pr_sdl_err() {
@@ -30,6 +33,9 @@ static void pr_sdl_err() {
 int octave = -1;
 
 int key= 0; // 0 is off, 1 is a C
+
+unsigned cutoff = 1500;
+float resonance = 0.8;
 
 float pianokey_per_scancode[SDL_SCANCODE_COUNT] = {
 	[SDL_SCANCODE_Z] = 12,
@@ -126,8 +132,8 @@ static bool render_sample_frames(long long *current_frame, int frames,
 	for (s = 0; s < frames; s++) {
 
 		if (*current_frame%1000 == 0) {
-			int cut_freq =  1500 + 110 * cosine_render_sample(*current_frame, spec, 0.1);
-			low_pass_filter_get_configure(cut_freq, 0.3, spec->freq);
+			int cut_freq =  max(100, cutoff + 110 * cosine_render_sample(*current_frame, spec, 0.1));
+			low_pass_filter_configure(cut_freq, resonance, spec->freq);
 		}
 
 
@@ -344,9 +350,16 @@ int main(int argc, char **argv) {
 	while (!abort) {
 		if (SDL_PollEvent(&event)) {
 			if (event.type == SDL_EVENT_KEY_DOWN) {
-				key = pianokey_per_scancode[event.key.scancode];
-				if (key != 0)
-					key += 12*octave;
+				if (event.key.scancode == SDL_SCANCODE_UP)
+						cutoff = min (20000, cutoff + 500);
+				else if (event.key.scancode == SDL_SCANCODE_DOWN) {
+						int reduction = min (500, cutoff);
+						cutoff = max (100, cutoff - reduction);
+				} else {
+					key = pianokey_per_scancode[event.key.scancode];
+					if (key != 0)
+						key += 12*octave;
+				}
 			} else if(event.type == SDL_EVENT_KEY_UP) {
 				if (key == 12*octave +pianokey_per_scancode[event.key.scancode])
 					key = 0;
