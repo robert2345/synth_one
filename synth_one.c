@@ -16,6 +16,8 @@
 
 #define WIDTH (640)
 #define HEIGHT (480)
+#define X_STEP (5)
+#define WAVEFORM_LEN (WIDTH/X_STEP)
 
 static bool abort = false;
 
@@ -77,6 +79,8 @@ void init_key_to_freq()
 
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+int waveform_written = 0;
+SDL_FPoint points [WIDTH/X_STEP];
 SDL_AudioStream *stream;
 char *buf;
 long long current_frame = 0;
@@ -127,10 +131,23 @@ static bool render_sample_frames(long long *current_frame, int frames,
 		}
 
 
+		// what is going on with channels here? only one buffer so it seems a bit broken if multiple channels.
 		for (c = 0; c < spec->channels; c++) {
 			sample = render_sample(*current_frame, spec);
 			write_sample(sample, &buf, spec);
 		}
+
+		// write to visualisation buffer
+		{
+			int samples_per_period = spec->freq / key_to_freq[key];
+			bool on_grid = (*current_frame % (2 * samples_per_period / WAVEFORM_LEN)== 0) && waveform_written < WAVEFORM_LEN && waveform_written != 0;
+			bool first_sample = ((*current_frame % samples_per_period) == 0) && (waveform_written == 0);
+			if (first_sample || on_grid) {
+				points[waveform_written].y = HEIGHT/2 + HEIGHT/2 * sample;
+				waveform_written++;
+			}
+		}
+
 		*current_frame += 1;
 	}
 
@@ -170,28 +187,21 @@ static void trigger_draw_video_event(union sigval)
 
 static void draw_waveform(SDL_Renderer *renderer) 
 {
-#define X_STEP (5)
 	int i;
-	SDL_FPoint points [WIDTH/X_STEP];
 	float time_scale_factor = 3.0;
 
 	// draw every 5:th pixel of the window in x
-	//
 	
-	for (i = 0; i < WIDTH/X_STEP; i++)
-	{
-		float x = i *X_STEP;
-		float y = (HEIGHT/2) + (HEIGHT / 2 * render_sample(i * X_STEP*time_scale_factor, &input_spec));
-		points[i].x = x;
-		points[i].y = y;
- 
+	pthread_mutex_lock(&mutex);
+	if (waveform_written == WAVEFORM_LEN) {
+		SDL_SetRenderDrawColor(renderer, 0,0,0,255);
+		SDL_RenderClear(renderer);
+		SDL_SetRenderDrawColor(renderer, 255,255,255,255);
+		SDL_RenderLines(renderer, points, WIDTH/X_STEP);
+		SDL_RenderPresent(renderer);
+		waveform_written = 0;
 	}
-
-	SDL_SetRenderDrawColor(renderer, 0,0,0,255);
-	SDL_RenderClear(renderer);
-	SDL_SetRenderDrawColor(renderer, 255,255,255,255);
-	SDL_RenderLines(renderer, points, WIDTH/X_STEP);
-	SDL_RenderPresent(renderer);
+	pthread_mutex_unlock(&mutex);
 
 
 }
@@ -218,9 +228,16 @@ static int setup_audio_timer()
 
 static int setup_video_timer()
 {
+	int i;
 	struct sigevent sevnt = { .sigev_notify = SIGEV_THREAD, .sigev_notify_function = trigger_draw_video_event };
 	timer_t t;
-	struct itimerspec new_value = {.it_interval = {.tv_nsec = 1000000000ull / 4}};
+
+	// initialize the points that shall be drawn
+	for (i = 0; i < WAVEFORM_LEN; i++)
+		points[i].x = i*X_STEP;
+
+
+	struct itimerspec new_value = {.it_interval = {.tv_nsec = 1000000000ull / 8}};
 	new_value.it_value = new_value.it_interval;
 
 	int ret = timer_create(CLOCK_MONOTONIC, &sevnt, &t);
