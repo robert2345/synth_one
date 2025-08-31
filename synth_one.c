@@ -1,6 +1,7 @@
 #include <SDL3/SDL_audio.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_scancode.h>
+#include <SDL3/SDL_render.h>
 #include <malloc.h>
 #include <math.h>
 #include <signal.h>
@@ -12,6 +13,9 @@
 
 #include "low_pass_filter.h"
 #include "cosine.h"
+
+#define WIDTH (640)
+#define HEIGHT (480)
 
 static bool abort = false;
 
@@ -99,7 +103,7 @@ static float render_sample(const long long current_frame,
 		const SDL_AudioSpec *spec) {
 	float sample;
 	float width = 0.25 + 0.2*cosine_render_sample(current_frame, spec, 0.3);
-	sample = render_pulse(current_frame, spec, key_to_freq[key], width);
+	sample = 0.8*render_pulse(current_frame, spec, key_to_freq[key], width);
 	if (!key) sample = 0.0;
 	sample = low_pass_filter_get_output(sample);
 	return sample;
@@ -107,7 +111,7 @@ static float render_sample(const long long current_frame,
 
 static void write_sample(float sample, char **buf, const SDL_AudioSpec *spec) {
 	int16_t *out = (int16_t *)*buf;
-	*out = (int16_t)sample * 0x7FFF;
+	*out = (int16_t)(sample * 0x7FFF);
 	*buf += 2;
 }
 
@@ -138,7 +142,7 @@ static unsigned calc_frames_queued(SDL_AudioStream *stream,
 	return bytes_queued / calc_frame_size(spec);
 }
 
-void fill_audio_buffer(union sigval)
+static void fill_audio_buffer(union sigval)
 {
 	pthread_mutex_lock(&mutex);
 	// check how much is in buffer
@@ -153,7 +157,82 @@ void fill_audio_buffer(union sigval)
 
 }
 
+static void trigger_draw_video_event(union sigval)
+{
+	SDL_Event user_event;
+	SDL_zero(user_event);  /* SDL will copy this entire struct! Initialize to keep memory checkers happy. */
+	user_event.type = SDL_EVENT_USER;
+	user_event.user.code = 1;
+	user_event.user.data1 = NULL;
+	user_event.user.data2 = NULL;
+	SDL_PushEvent(&user_event);
+}
+
+static void draw_waveform(SDL_Renderer *renderer) 
+{
+#define X_STEP (5)
+	int i;
+	SDL_FPoint points [WIDTH/X_STEP];
+	float time_scale_factor = 3.0;
+
+	// draw every 5:th pixel of the window in x
+	//
+	
+	for (i = 0; i < WIDTH/X_STEP; i++)
+	{
+		float x = i *X_STEP;
+		float y = (HEIGHT/2) + (HEIGHT / 2 * render_sample(i * X_STEP*time_scale_factor, &input_spec));
+		points[i].x = x;
+		points[i].y = y;
+ 
+	}
+
+	SDL_SetRenderDrawColor(renderer, 0,0,0,255);
+	SDL_RenderClear(renderer);
+	SDL_SetRenderDrawColor(renderer, 255,255,255,255);
+	SDL_RenderLines(renderer, points, WIDTH/X_STEP);
+	SDL_RenderPresent(renderer);
+
+
+}
+
 static void sig_handler(int signum) { printf("ABORT!\n"); abort = true; }
+
+static int setup_audio_timer()
+{
+	struct sigevent sevnt = { .sigev_notify = SIGEV_THREAD, .sigev_notify_function = fill_audio_buffer };
+	timer_t t;
+	struct itimerspec new_value = {.it_interval = {.tv_nsec = buffer_frames / 8 * 1000000000ull / input_spec.freq}};
+	new_value.it_value = new_value.it_interval;
+
+	int ret = timer_create(CLOCK_MONOTONIC, &sevnt, &t);
+	if (ret) {
+		perror("Failed to create audio timer!");
+		return -1;
+	}
+
+	timer_settime( t, 0, &new_value, NULL);
+
+	return 0;
+}
+
+static int setup_video_timer()
+{
+	struct sigevent sevnt = { .sigev_notify = SIGEV_THREAD, .sigev_notify_function = trigger_draw_video_event };
+	timer_t t;
+	struct itimerspec new_value = {.it_interval = {.tv_nsec = 1000000000ull / 4}};
+	new_value.it_value = new_value.it_interval;
+
+	int ret = timer_create(CLOCK_MONOTONIC, &sevnt, &t);
+	if (ret) {
+		perror("Failed to create video timer!");
+		return -1;
+	}
+
+	timer_settime( t, 0, &new_value, NULL);
+
+	return 0;
+}
 
 int main(int argc, char **argv) {
 	SDL_AudioDeviceID devId;
@@ -164,7 +243,7 @@ int main(int argc, char **argv) {
 
 	if (!SDL_Init(SDL_INIT_EVENTS |SDL_INIT_AUDIO | SDL_INIT_VIDEO)) {
 		pr_sdl_err();
-		return -1;
+		return -2;
 	}
 
 	signal(SIGINT, sig_handler);
@@ -172,14 +251,23 @@ int main(int argc, char **argv) {
 	// VIDEO STUFF
 	window = SDL_CreateWindow(
 			"Synth One",                  // window title
-			640,                               // width, in pixels
+			WIDTH,                               // width, in pixels
 			480,                               // height, in pixels
 			SDL_WINDOW_OPENGL                  // flags - see below
 			);
 	if (!window) {
 		pr_sdl_err();
+		return -1;
+	}
+
+	SDL_Renderer* renderer = SDL_CreateRenderer(window,NULL);
+	if (!renderer) {
+		pr_sdl_err();
 		return 1;
 	}
+
+	if (res = setup_video_timer())
+		return res;
 
 
 	//AUDIO STUFF
@@ -232,18 +320,8 @@ int main(int argc, char **argv) {
 	}
 	pthread_mutex_unlock(&mutex);
 
-	struct sigevent sevnt = { .sigev_notify = SIGEV_THREAD, .sigev_notify_function = fill_audio_buffer };
-	timer_t t;
-	struct itimerspec new_value = {.it_interval = {.tv_nsec = buffer_frames / 8 * 1000000000ull / input_spec.freq}};
-	new_value.it_value = new_value.it_interval;
-
-	int ret = timer_create(CLOCK_MONOTONIC, &sevnt, &t);
-	if (ret) {
-		perror("Failed to create timer!");
-		return 6;
-	}
-
-	timer_settime( t, 0, &new_value, NULL);
+	if (res = setup_audio_timer())
+		return res;
 
 	SDL_Event event;
 	while (!abort) {
@@ -255,6 +333,8 @@ int main(int argc, char **argv) {
 			} else if(event.type == SDL_EVENT_KEY_UP) {
 				if (key == 12*octave +pianokey_per_scancode[event.key.scancode])
 					key = 0;
+			} else if (event.type == SDL_EVENT_USER) {
+				draw_waveform(renderer);
 			}
 		}
 	}
