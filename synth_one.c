@@ -10,6 +10,8 @@
 #include <time.h>
 #include <pthread.h>
 
+#include "low_pass_filter.h"
+#include "cosine.h"
 
 static bool abort = false;
 
@@ -18,16 +20,6 @@ static void pr_sdl_err() {
 	SDL_ClearError();
 }
 
-
-// Filter. Source https://cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf
-float v2 = 0;
-float g = 0;
-float v1 = 0;
-float ic2eq = 0;
-float ic1eq = 0;
-float a2 = 0;
-float a1 = 0.0;
-int cutoff = 4000;
 
 int octave = -1;
 
@@ -89,31 +81,6 @@ size_t frame_size;
 const SDL_AudioSpec input_spec = {
 	.channels = 1, .format = SDL_AUDIO_S16, .freq = 44100};
 
-
-
-static void calc_filter(float cut_freq, float res, int samplerate)
-{
-	cutoff = cut_freq;
-	g = tan(M_PI * cutoff / samplerate);
-	float k = 2.0-2*res;
-	a1 = 1.0/(1.0+g*(g+k));
-	a2 = g * a1;
-
-
-}
-
-static float get_filter_output(float v0)
-{
-
-	v1 = a1*ic1eq + a2*(v0 - ic2eq);
-	v2 = ic2eq + g*v1;
-	ic1eq = 2*v1 - ic1eq;
-	ic2eq = 2*v2 - ic2eq;
-
-	return v2;
-}
-
-
 static size_t calc_frame_size(const SDL_AudioSpec *spec) {
 	return spec->channels * SDL_AUDIO_BYTESIZE(spec->format);
 }
@@ -127,26 +94,20 @@ static float render_pulse(const long long current_frame,
 	else
 		return 1.0;
 }
-static float render_sine(const long long current_frame,
-		const SDL_AudioSpec *spec, float freq) {
-	float time = current_frame * 1.0 / spec->freq;
-	return 1.0-0.4*(1.0+cos(freq*2 * M_PI * time));
-}
 
 static float render_sample(const long long current_frame,
 		const SDL_AudioSpec *spec) {
 	float sample;
-	float width = 0.5*render_sine(current_frame, spec, 0.3);
+	float width = 0.25 + 0.2*cosine_render_sample(current_frame, spec, 0.3);
 	sample = render_pulse(current_frame, spec, key_to_freq[key], width);
 	if (!key) sample = 0.0;
-	sample = get_filter_output(sample);
+	sample = low_pass_filter_get_output(sample);
 	return sample;
 }
 
 static void write_sample(float sample, char **buf, const SDL_AudioSpec *spec) {
 	int16_t *out = (int16_t *)*buf;
 	*out = (int16_t)sample * 0x7FFF;
-	// printf("out 0x%hx\n", *out);
 	*buf += 2;
 }
 
@@ -157,19 +118,17 @@ static bool render_sample_frames(long long *current_frame, int frames,
 	for (s = 0; s < frames; s++) {
 
 		if (*current_frame%1000 == 0) {
-			int cut_freq =  1500*render_sine(*current_frame, spec, 0.1);
-			calc_filter(cut_freq, 0.3, spec->freq);
+			int cut_freq =  1500 + 110 * cosine_render_sample(*current_frame, spec, 0.1);
+			low_pass_filter_get_configure(cut_freq, 0.3, spec->freq);
 		}
 
 
 		for (c = 0; c < spec->channels; c++) {
-			sample = render_sample(*current_frame, spec); // sin(2*pi*f*t)
+			sample = render_sample(*current_frame, spec);
 			write_sample(sample, &buf, spec);
 		}
 		*current_frame += 1;
 	}
-	// printf("Render sample frames, last value %f current frame %lld, frames to
-	// render%d\n", sample, *current_frame, frames);
 
 	return true;
 }
