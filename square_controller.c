@@ -70,6 +70,7 @@ struct square_controller *square_controller_create(int x, int y, int width, int 
 	sc->height = height;
 	sc->x_control = x_control;
 	sc->y_control = y_control;
+	sc->clicked = false;
 
 	set_marker(sc, x+width/2, y+height /2);
 
