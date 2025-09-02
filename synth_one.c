@@ -13,6 +13,7 @@
 
 #include "low_pass_filter.h"
 #include "cosine.h"
+#include "square_controller.h"
 
 #define WIDTH (640)
 #define HEIGHT (480)
@@ -34,8 +35,10 @@ int octave = -1;
 
 int key= 0; // 0 is off, 1 is a C
 
-unsigned cutoff = 1500;
+float cutoff = 1500;
 float resonance = 0.8;
+
+struct square_controller *sc_arr[2] = {};
 
 float pianokey_per_scancode[SDL_SCANCODE_COUNT] = {
 	[SDL_SCANCODE_Z] = 12,
@@ -195,6 +198,7 @@ static void draw_waveform(SDL_Renderer *renderer)
 {
 	int i;
 	float time_scale_factor = 3.0;
+	struct square_controller *sc;
 
 	// draw every 5:th pixel of the window in x
 	
@@ -204,11 +208,16 @@ static void draw_waveform(SDL_Renderer *renderer)
 		SDL_RenderClear(renderer);
 		SDL_SetRenderDrawColor(renderer, 255,255,255,255);
 		SDL_RenderLines(renderer, points, WIDTH/X_STEP);
+		for (i = 0; (sc = sc_arr[i]); i++)
+		{
+			square_controller_draw(renderer, sc);
+
+		}
 		SDL_RenderPresent(renderer);
 		waveform_written = 0;
 	}
-	pthread_mutex_unlock(&mutex);
 
+	pthread_mutex_unlock(&mutex);
 
 }
 
@@ -289,6 +298,8 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
+	sc_arr[0] = square_controller_create(5,5,100,100,(struct linear_controller){&resonance, 0.9, 0.1}, (struct linear_controller){&cutoff, 20000, 100});
+
 	if (res = setup_video_timer())
 		return res;
 
@@ -365,6 +376,13 @@ int main(int argc, char **argv) {
 					key = 0;
 			} else if (event.type == SDL_EVENT_USER) {
 				draw_waveform(renderer);
+			} else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+				int i;
+				struct square_controller *sc;
+				for (i = 0; (sc = sc_arr[i]); i++)
+				{
+					square_controller_click(sc, event.button.x, event.button.y);
+				}
 			}
 		}
 	}

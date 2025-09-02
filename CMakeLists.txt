@@ -12,7 +12,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_subdirectory(SDL EXCLUDE_FROM_ALL)
 
 # Create your game executable target as usual
-add_executable(synth_one synth_one.c low_pass_filter.c)
+add_executable(synth_one synth_one.c low_pass_filter.c square_controller.c square_controller.c)
 
 # Link to the actual SDL3 library.
 target_link_libraries(synth_one PRIVATE SDL3::SDL3)
