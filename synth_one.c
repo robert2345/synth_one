@@ -129,6 +129,28 @@ static float render_pulse(const long long current_frame,
 		return 1.0;
 }
 
+static float get_delayed_sample(float sample, float delay_ms, const SDL_AudioSpec *spec)
+{
+	int delay_samples = spec->freq*delay_ms/1000;
+#define DELAY_BUF_LEN (44100*50/1000)
+	static int pos = 0;
+	static float buffer[DELAY_BUF_LEN] = {};
+	if (delay_samples >= DELAY_BUF_LEN) {
+		printf("Too large delay!");
+	}
+
+	int ret_pos = pos - delay_samples;
+	if(ret_pos < 0)
+		ret_pos = DELAY_BUF_LEN + ret_pos;
+
+	//printf("len %d, pos = %d, ret_pos %d\n", DELAY_BUF_LEN, pos, ret_pos);
+	pos+=1;
+	pos = pos % DELAY_BUF_LEN;
+	buffer[pos] = sample;
+
+	return buffer[ret_pos];
+}
+
 static float render_sample(const long long current_frame,
 		const SDL_AudioSpec *spec, bool *new_period) {
 	float sample;
@@ -137,6 +159,8 @@ static float render_sample(const long long current_frame,
 	width = min(MAX_WIDTH, width);
 	sample = 0.3*render_pulse(current_frame, spec, bend*key_to_freq[key], width, new_period);
 	if (!key) sample = 0.0;
+	float delay_ms = 3.0+ 1.0*cosine_render_sample(current_frame, spec, 3);
+	sample += 0.3*get_delayed_sample(sample, delay_ms, spec);
 	sample = low_pass_filter_get_output(sample);
 	return sample;
 }
