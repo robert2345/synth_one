@@ -23,6 +23,9 @@
 #define min(x, y) ((x) < (y) ? x : y)
 #define max(x, y) ((x) < (y) ? y : x)
 
+#define MAX_WIDTH (0.5)
+#define MIN_WIDTH (0.1)
+
 static bool abort = false;
 
 static void pr_sdl_err() {
@@ -31,14 +34,18 @@ static void pr_sdl_err() {
 }
 
 
-int octave = -1;
+int octave = 1;
 
 int key= 0; // 0 is off, 1 is a C
 
 float cutoff = 1500;
 float resonance = 0.8;
 
-struct square_controller *sc_arr[2] = {};
+float base_width = MAX_WIDTH;
+float bend = 1.0;
+float bend_target = 1.0;
+
+struct square_controller *sc_arr[3] = {};
 
 float pianokey_per_scancode[SDL_SCANCODE_COUNT] = {
 	[SDL_SCANCODE_Z] = 12,
@@ -103,20 +110,30 @@ static size_t calc_frame_size(const SDL_AudioSpec *spec) {
 }
 
 static float render_pulse(const long long current_frame,
-		const SDL_AudioSpec *spec, float freq, float width) {
-	int frames_per_period = spec->freq / freq;
-	int frames_past_last_period = current_frame % frames_per_period;
-	if (frames_past_last_period > (int)(width * frames_per_period))
+		const SDL_AudioSpec *spec, float freq, float width, bool *new_period) {
+	static float period_position = 0.0;
+	period_position +=  freq / spec->freq;
+	if (period_position > 1.0) {
+		period_position-= 1.0;
+		*new_period = true;
+	} else
+	{
+		*new_period = false;
+	}
+
+	if (period_position > width)
 		return -1.0;
 	else
 		return 1.0;
 }
 
 static float render_sample(const long long current_frame,
-		const SDL_AudioSpec *spec) {
+		const SDL_AudioSpec *spec, bool *new_period) {
 	float sample;
-	float width = 0.25 + 0.2*cosine_render_sample(current_frame, spec, 0.3);
-	sample = 0.8*render_pulse(current_frame, spec, key_to_freq[key], width);
+	float width = base_width + 0.1*cosine_render_sample(current_frame, spec, 0.8);
+	width = max(MIN_WIDTH, width);
+	width = min(MAX_WIDTH, width);
+	sample = 0.3*render_pulse(current_frame, spec, bend*key_to_freq[key], width, new_period);
 	if (!key) sample = 0.0;
 	sample = low_pass_filter_get_output(sample);
 	return sample;
@@ -133,6 +150,7 @@ static bool render_sample_frames(long long *current_frame, int frames,
 	int s, c = 0;
 	float sample;
 	for (s = 0; s < frames; s++) {
+		bool new_period;
 
 		if (*current_frame%1000 == 0) {
 			int cut_freq =  max(100, cutoff + 110 * cosine_render_sample(*current_frame, spec, 0.1));
@@ -142,20 +160,32 @@ static bool render_sample_frames(long long *current_frame, int frames,
 
 		// what is going on with channels here? only one buffer so it seems a bit broken if multiple channels.
 		for (c = 0; c < spec->channels; c++) {
-			sample = render_sample(*current_frame, spec);
+			sample = render_sample(*current_frame, spec, &new_period);
 			write_sample(sample, &buf, spec);
+		}
+
+		if (new_period) {
+#define BEND_STEP (0.001)
+			float bend_diff = bend_target - bend;
+			if (bend_diff > BEND_STEP) {
+				bend += BEND_STEP;
+			} else if (bend_diff < -BEND_STEP) {
+				bend -= BEND_STEP;
+			} else {
+				bend = bend_target;
+			}
 		}
 
 		// write to visualisation buffer
 		{
-			int samples_per_period = spec->freq / key_to_freq[key];
+			int samples_per_period = spec->freq / (bend*key_to_freq[key]);
 			bool on_grid = (*current_frame % (2 * samples_per_period / WAVEFORM_LEN)== 0) && waveform_written < WAVEFORM_LEN && waveform_written != 0;
-			bool first_sample = ((*current_frame % samples_per_period) == 0) && (waveform_written == 0);
-			if (first_sample || on_grid) {
+			if ((new_period && (waveform_written == 0)) || on_grid) {
 				points[waveform_written].y = HEIGHT/2 + HEIGHT/2 * sample;
 				waveform_written++;
 			}
 		}
+	
 
 		*current_frame += 1;
 	}
@@ -298,7 +328,8 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	sc_arr[0] = square_controller_create(5,5,100,100,(struct linear_controller){&resonance, 0.9, 0.1}, (struct linear_controller){&cutoff, 20000, 100});
+	sc_arr[0] = square_controller_create(5,5,100,100,(struct linear_controller){&resonance, 0.9, 0.01}, (struct linear_controller){&cutoff, input_spec.freq/2.5, 50});
+	sc_arr[1] = square_controller_create(110,5,100,100,(struct linear_controller){&base_width, MIN_WIDTH, MAX_WIDTH}, (struct linear_controller){&bend_target, 0.8, 1.2});
 
 	if (res = setup_video_timer())
 		return res;
@@ -382,6 +413,13 @@ int main(int argc, char **argv) {
 				for (i = 0; (sc = sc_arr[i]); i++)
 				{
 					square_controller_click(sc, event.button.x, event.button.y);
+				}
+			} else if (event.type == SDL_EVENT_MOUSE_MOTION) {
+				int i;
+				struct square_controller *sc;
+				for (i = 0; (sc = sc_arr[i]); i++)
+				{
+						square_controller_click(sc, event.motion.x, event.motion.y);
 				}
 			}
 		}

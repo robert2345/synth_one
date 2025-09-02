@@ -6,7 +6,7 @@
 static float cosine_render_sample(const long long current_frame,
 		const SDL_AudioSpec *spec, float freq) {
 	float time = current_frame * 1.0 / spec->freq;
-	return (1.0+cos(freq*2 * M_PI * time));
+	return (cos(freq*2 * M_PI * time));
 }
 
 
