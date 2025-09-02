@@ -26,6 +26,16 @@ static void linear_controller_set(struct linear_controller *lc, float setting)
 
 }
 
+	void square_controller_move(struct square_controller *sc, int x, int y)
+{
+	if (sc->clicked && x >=  sc->x && x <= (sc->x + sc->width) && y >= sc->y && y <= (sc->y + sc->height))
+	{
+		linear_controller_set(&sc->x_control, 1.0*(x-sc->x) / sc->width);
+		linear_controller_set(&sc->y_control, 1.0*(y-sc->y) / sc->height);
+		set_marker(sc, x, y);
+	}
+}
+
 void square_controller_click(struct square_controller *sc, int x, int y)
 {
 	if (x >=  sc->x && x <= (sc->x + sc->width) && y >= sc->y && y <= (sc->y + sc->height))
@@ -33,7 +43,13 @@ void square_controller_click(struct square_controller *sc, int x, int y)
 		linear_controller_set(&sc->x_control, 1.0*(x-sc->x) / sc->width);
 		linear_controller_set(&sc->y_control, 1.0*(y-sc->y) / sc->height);
 		set_marker(sc, x, y);
+		sc->clicked = true;
 	}
+}
+
+void square_controller_unclick(struct square_controller *sc)
+{
+	sc->clicked = false;
 }
 
 void square_controller_draw(SDL_Renderer *renderer, struct square_controller *sc)

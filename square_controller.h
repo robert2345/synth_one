@@ -9,6 +9,7 @@ struct linear_controller {
 };
 
 struct square_controller {
+	bool clicked;
 	int x;
 	int y;
 	int width;
@@ -21,6 +22,8 @@ struct square_controller {
 
 
 void square_controller_click(struct square_controller *sc, int x, int y);
+void square_controller_unclick(struct square_controller *sc);
+void square_controller_move(struct square_controller *sc, int x, int y);
 
 void square_controller_draw(SDL_Renderer *renderer, struct square_controller *sc);
 

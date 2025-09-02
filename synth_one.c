@@ -414,12 +414,19 @@ int main(int argc, char **argv) {
 				{
 					square_controller_click(sc, event.button.x, event.button.y);
 				}
+			} else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+				int i;
+				struct square_controller *sc;
+				for (i = 0; (sc = sc_arr[i]); i++)
+				{
+					square_controller_unclick(sc);
+				}
 			} else if (event.type == SDL_EVENT_MOUSE_MOTION) {
 				int i;
 				struct square_controller *sc;
 				for (i = 0; (sc = sc_arr[i]); i++)
 				{
-						square_controller_click(sc, event.motion.x, event.motion.y);
+					square_controller_move(sc, event.motion.x, event.motion.y);
 				}
 			}
 		}
