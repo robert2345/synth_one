@@ -42,6 +42,8 @@ float cutoff = 1500;
 float resonance = 0.8;
 
 float base_width = MAX_WIDTH;
+float pwm_freq = 1.0;
+
 float bend = 1.0;
 float bend_target = 1.0;
 
@@ -130,7 +132,7 @@ static float render_pulse(const long long current_frame,
 static float render_sample(const long long current_frame,
 		const SDL_AudioSpec *spec, bool *new_period) {
 	float sample;
-	float width = base_width + 0.1*cosine_render_sample(current_frame, spec, 0.8);
+	float width = base_width + 0.1*cosine_render_sample(current_frame, spec, pwm_freq);
 	width = max(MIN_WIDTH, width);
 	width = min(MAX_WIDTH, width);
 	sample = 0.3*render_pulse(current_frame, spec, bend*key_to_freq[key], width, new_period);
@@ -329,7 +331,7 @@ int main(int argc, char **argv) {
 	}
 
 	sc_arr[0] = square_controller_create(5,5,100,100,(struct linear_controller){&resonance, 0.9, 0.01}, (struct linear_controller){&cutoff, input_spec.freq/2.5, 50});
-	sc_arr[1] = square_controller_create(110,5,100,100,(struct linear_controller){&base_width, MIN_WIDTH, MAX_WIDTH}, (struct linear_controller){&bend_target, 0.8, 1.2});
+	sc_arr[1] = square_controller_create(110,5,100,100,(struct linear_controller){&base_width, MIN_WIDTH, MAX_WIDTH}, (struct linear_controller){&pwm_freq, 0.1, 10.0});
 
 	if (res = setup_video_timer())
 		return res;
