@@ -14,6 +14,8 @@ struct square_controller {
 	int y;
 	int width;
 	int height;
+	const char *x_label;
+	const char *y_label;
 	struct linear_controller x_control;
 	struct linear_controller y_control;
 	SDL_FPoint marker_points[5];
@@ -27,7 +29,7 @@ void square_controller_move(struct square_controller *sc, int x, int y);
 
 void square_controller_draw(SDL_Renderer *renderer, struct square_controller *sc);
 
-struct square_controller *square_controller_create(int x, int y, int width, int height, struct linear_controller x_control, struct linear_controller y_control);
 
+struct square_controller *square_controller_create(int x, int y, int width, int height, struct linear_controller x_control, struct linear_controller y_control, const char *x_label, const char *y_label);
 
 void square_controller_destroy(struct square_controller *sc);

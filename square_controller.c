@@ -1,5 +1,6 @@
 #include <stdlib.h>
 
+#include "text.h"
 #include "square_controller.h"
 
 static void set_marker(struct square_controller *sc, int x, int y)
@@ -26,8 +27,9 @@ static void linear_controller_set(struct linear_controller *lc, float setting)
 
 }
 
-	void square_controller_move(struct square_controller *sc, int x, int y)
+void square_controller_move(struct square_controller *sc, int x, int y)
 {
+	// fix offset with text here.
 	if (sc->clicked && x >=  sc->x && x <= (sc->x + sc->width) && y >= sc->y && y <= (sc->y + sc->height))
 	{
 		linear_controller_set(&sc->x_control, 1.0*(x-sc->x) / sc->width);
@@ -54,6 +56,9 @@ void square_controller_unclick(struct square_controller *sc)
 
 void square_controller_draw(SDL_Renderer *renderer, struct square_controller *sc)
 {
+	text_draw(renderer, sc->x_label, sc->x, sc->y+sc->height, false);
+	text_draw(renderer, sc->y_label, sc->x+sc->width, sc->y+sc->height, true);
+
 	SDL_SetRenderDrawColor(renderer, 0,50,150,255);
 	SDL_RenderLines(renderer, sc->border_points, 5);
 	SDL_SetRenderDrawColor(renderer, 150,50,0,255);
@@ -61,9 +66,10 @@ void square_controller_draw(SDL_Renderer *renderer, struct square_controller *sc
 }
 
 
-struct square_controller *square_controller_create(int x, int y, int width, int height, struct linear_controller x_control, struct linear_controller y_control)
+struct square_controller *square_controller_create(int x, int y, int width, int height, struct linear_controller x_control, struct linear_controller y_control, const char *x_label, const char *y_label)
 {
 	struct square_controller *sc = malloc(sizeof(*sc));
+	int text_margin = 16;
 	sc->x = x;
 	sc->y = y;
 	sc->width = width;
@@ -71,7 +77,9 @@ struct square_controller *square_controller_create(int x, int y, int width, int 
 	sc->x_control = x_control;
 	sc->y_control = y_control;
 	sc->clicked = false;
-
+	sc->x_label = x_label;
+	sc->y_label = y_label;
+	
 	set_marker(sc, x+width/2, y+height /2);
 
 	sc->border_points[0].x = x;

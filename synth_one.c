@@ -14,6 +14,7 @@
 #include "low_pass_filter.h"
 #include "cosine.h"
 #include "square_controller.h"
+#include "text.h"
 
 #define WIDTH (640)
 #define HEIGHT (480)
@@ -269,6 +270,9 @@ static void draw_waveform(SDL_Renderer *renderer)
 			square_controller_draw(renderer, sc);
 
 		}
+
+		text_draw(renderer, "THIS IS A SYNTHESIZER!", WIDTH  / 2 - 10*16, HEIGHT - 32, false);
+
 		SDL_RenderPresent(renderer);
 		waveform_written = 0;
 	}
@@ -354,8 +358,10 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	sc_arr[0] = square_controller_create(5,5,100,100,(struct linear_controller){&resonance, 0.9, 0.01}, (struct linear_controller){&cutoff, input_spec.freq/2.5, 50});
-	sc_arr[1] = square_controller_create(110,5,100,100,(struct linear_controller){&base_width, MIN_WIDTH, MAX_WIDTH}, (struct linear_controller){&pwm_freq, 0.1, 10.0});
+	sc_arr[0] = square_controller_create(5,5,100,100,(struct linear_controller){&resonance, 0.9, 0.01}, (struct linear_controller){&cutoff, input_spec.freq/2.5, 50}, "RES", "CUTOFF");
+	sc_arr[1] = square_controller_create(126,5,100,100,(struct linear_controller){&base_width, MIN_WIDTH, MAX_WIDTH}, (struct linear_controller){&pwm_freq, 0.1, 10.0}, "PWDTH", "MOD FRQ");
+
+	text_init(renderer);
 
 	if (res = setup_video_timer())
 		return res;
