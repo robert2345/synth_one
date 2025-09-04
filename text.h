@@ -4,4 +4,4 @@
 
 void text_init(SDL_Renderer *renderer);
 void text_exit();
-void text_draw(SDL_Renderer *renderer, const char* text, int x, int y, bool vertical);
+void text_draw(SDL_Renderer *renderer, const char *text, int x, int y, bool vertical);
