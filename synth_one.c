@@ -12,6 +12,7 @@
 
 #include "cosine.h"
 #include "delay.h"
+#include "distortion.h"
 #include "low_pass_filter.h"
 #include "square_controller.h"
 #include "text.h"
@@ -48,7 +49,10 @@ float pwm_freq = 1.0;
 float bend = 1.0;
 float bend_target = 1.0;
 
-struct square_controller *sc_arr[3] = {};
+float dist_level = 0.6;
+float flip_level = 0.8;
+
+struct square_controller *sc_arr[4] = {};
 
 float pianokey_per_scancode[SDL_SCANCODE_COUNT] = {
     [SDL_SCANCODE_Z] = 12, [SDL_SCANCODE_S] = 13, [SDL_SCANCODE_X] = 14, [SDL_SCANCODE_D] = 15, [SDL_SCANCODE_C] = 16,
@@ -119,13 +123,14 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
     if (!key)
         sample = 0.0;
 
-    //filter
+    // filter
     sample = low_pass_filter_get_output(sample);
 
-    //distort
+    // distort
 
+    sample = distort(sample, dist_level, flip_level);
 
-    //echo
+    // echo
     sample += 0.2 * delay_get_sample(300, spec);
     delay_put_sample(sample);
 
@@ -347,11 +352,13 @@ int main(int argc, char **argv)
     }
 
     sc_arr[0] =
-        square_controller_create(5, 5, 100, 100, (struct linear_controller){&resonance, 0.9, 0.01},
+        square_controller_create(10, 10, 100, 100, (struct linear_controller){&resonance, 0.9, 0.01},
                                  (struct linear_controller){&cutoff, input_spec.freq / 2.5, 50}, "RES", "CUTOFF");
     sc_arr[1] =
-        square_controller_create(126, 5, 100, 100, (struct linear_controller){&base_width, MIN_WIDTH, MAX_WIDTH},
+        square_controller_create(230, 10, 100, 100, (struct linear_controller){&base_width, MIN_WIDTH, MAX_WIDTH},
                                  (struct linear_controller){&pwm_freq, 0.1, 10.0}, "PWDTH", "MOD FRQ");
+    sc_arr[2] = square_controller_create(450, 10, 100, 100, (struct linear_controller){&dist_level, 0.1, 0.99},
+                                         (struct linear_controller){&flip_level, 0.1, 0.99}, "DIST", "CLIP");
 
     text_init(renderer);
 
