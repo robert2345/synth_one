@@ -119,15 +119,20 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
     if (!key)
         sample = 0.0;
 
-    delay_put_sample(sample);
+    //filter
+    sample = low_pass_filter_get_output(sample);
 
+    //distort
+
+
+    //echo
     sample += 0.2 * delay_get_sample(300, spec);
+    delay_put_sample(sample);
 
     // chorus
     float delay_ms = 3.0 + 1.0 * cosine_render_sample(current_frame, spec, 3);
     sample += 0.2 * delay_get_sample(delay_ms, spec);
 
-    sample = low_pass_filter_get_output(sample);
     return sample;
 }
 
