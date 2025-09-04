@@ -36,3 +36,8 @@ void delay_put_sample(float sample)
 	pos = pos % delay_buffer_len;
 	buffer[pos] = sample;
 }
+
+void delay_shutdown()
+{
+	free(buffer);
+}

@@ -35,7 +35,6 @@ static void pr_sdl_err() {
 	SDL_ClearError();
 }
 
-
 int octave = 1;
 
 int key= 0; // 0 is off, 1 is a C
@@ -272,29 +271,27 @@ static void draw_waveform(SDL_Renderer *renderer)
 
 static void sig_handler(int signum) { printf("ABORT!\n"); abort = true; }
 
-static int setup_audio_timer()
+static int setup_audio_timer(timer_t *t)
 {
 	struct sigevent sevnt = { .sigev_notify = SIGEV_THREAD, .sigev_notify_function = fill_audio_buffer };
-	timer_t t;
 	struct itimerspec new_value = {.it_interval = {.tv_nsec = buffer_frames / 8 * 1000000000ull / input_spec.freq}};
 	new_value.it_value = new_value.it_interval;
 
-	int ret = timer_create(CLOCK_MONOTONIC, &sevnt, &t);
+	int ret = timer_create(CLOCK_MONOTONIC, &sevnt, t);
 	if (ret) {
 		perror("Failed to create audio timer!");
 		return -1;
 	}
 
-	timer_settime( t, 0, &new_value, NULL);
+	timer_settime( *t, 0, &new_value, NULL);
 
 	return 0;
 }
 
-static int setup_video_timer()
+static int setup_video_timer(timer_t *t)
 {
 	int i;
 	struct sigevent sevnt = { .sigev_notify = SIGEV_THREAD, .sigev_notify_function = trigger_draw_video_event };
-	timer_t t;
 
 	// initialize the points that shall be drawn
 	for (i = 0; i < WAVEFORM_LEN; i++)
@@ -304,13 +301,13 @@ static int setup_video_timer()
 	struct itimerspec new_value = {.it_interval = {.tv_nsec = 1000000000ull / 8}};
 	new_value.it_value = new_value.it_interval;
 
-	int ret = timer_create(CLOCK_MONOTONIC, &sevnt, &t);
+	int ret = timer_create(CLOCK_MONOTONIC, &sevnt, t);
 	if (ret) {
 		perror("Failed to create video timer!");
 		return -1;
 	}
 
-	timer_settime( t, 0, &new_value, NULL);
+	timer_settime(*t, 0, &new_value, NULL);
 
 	return 0;
 }
@@ -321,6 +318,9 @@ int main(int argc, char **argv) {
 	SDL_AudioSpec output_spec;
 	int sample_frames;
 	SDL_Window *window;
+	timer_t audio_timer;
+	timer_t video_timer;
+
 
 	if (!SDL_Init(SDL_INIT_EVENTS |SDL_INIT_AUDIO | SDL_INIT_VIDEO)) {
 		pr_sdl_err();
@@ -354,7 +354,7 @@ int main(int argc, char **argv) {
 
 	delay_init(&input_spec, 500);
 
-	if (res = setup_video_timer())
+	if (res = setup_video_timer(&video_timer))
 		return res;
 
 
@@ -408,7 +408,7 @@ int main(int argc, char **argv) {
 	}
 	pthread_mutex_unlock(&mutex);
 
-	if (res = setup_audio_timer())
+	if (res = setup_audio_timer(&audio_timer))
 		return res;
 
 	SDL_Event event;
@@ -455,9 +455,13 @@ int main(int argc, char **argv) {
 		}
 	}
 
+	timer_delete(video_timer);
+	timer_delete(audio_timer);
 
 	SDL_DestroyAudioStream(stream);
 	SDL_CloseAudioDevice(devId);
+
+	free(buf);
 
 	return 0;
 }
