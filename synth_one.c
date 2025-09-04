@@ -15,6 +15,7 @@
 #include "cosine.h"
 #include "square_controller.h"
 #include "text.h"
+#include "delay.h"
 
 #define WIDTH (640)
 #define HEIGHT (480)
@@ -130,38 +131,26 @@ static float render_pulse(const long long current_frame,
 		return 1.0;
 }
 
-static float get_delayed_sample(float sample, float delay_ms, const SDL_AudioSpec *spec)
-{
-	int delay_samples = spec->freq*delay_ms/1000;
-#define DELAY_BUF_LEN (44100*50/1000)
-	static int pos = 0;
-	static float buffer[DELAY_BUF_LEN] = {};
-	if (delay_samples >= DELAY_BUF_LEN) {
-		printf("Too large delay!");
-	}
 
-	int ret_pos = pos - delay_samples;
-	if(ret_pos < 0)
-		ret_pos = DELAY_BUF_LEN + ret_pos;
-
-	//printf("len %d, pos = %d, ret_pos %d\n", DELAY_BUF_LEN, pos, ret_pos);
-	pos+=1;
-	pos = pos % DELAY_BUF_LEN;
-	buffer[pos] = sample;
-
-	return buffer[ret_pos];
-}
 
 static float render_sample(const long long current_frame,
 		const SDL_AudioSpec *spec, bool *new_period) {
 	float sample;
 	float width = base_width + 0.1*cosine_render_sample(current_frame, spec, pwm_freq);
+	
 	width = max(MIN_WIDTH, width);
 	width = min(MAX_WIDTH, width);
 	sample = 0.3*render_pulse(current_frame, spec, bend*key_to_freq[key], width, new_period);
 	if (!key) sample = 0.0;
+
+	delay_put_sample(sample);
+
+	sample += 0.2*delay_get_sample(300, spec);
+
+	// chorus
 	float delay_ms = 3.0+ 1.0*cosine_render_sample(current_frame, spec, 3);
-	sample += 0.3*get_delayed_sample(sample, delay_ms, spec);
+	sample += 0.2*delay_get_sample(delay_ms, spec);
+
 	sample = low_pass_filter_get_output(sample);
 	return sample;
 }
@@ -362,6 +351,8 @@ int main(int argc, char **argv) {
 	sc_arr[1] = square_controller_create(126,5,100,100,(struct linear_controller){&base_width, MIN_WIDTH, MAX_WIDTH}, (struct linear_controller){&pwm_freq, 0.1, 10.0}, "PWDTH", "MOD FRQ");
 
 	text_init(renderer);
+
+	delay_init(&input_spec, 500);
 
 	if (res = setup_video_timer())
 		return res;
