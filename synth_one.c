@@ -13,6 +13,7 @@
 #include "cosine.h"
 #include "delay.h"
 #include "distortion.h"
+#include "envelope.h"
 #include "low_pass_filter.h"
 #include "square_controller.h"
 #include "text.h"
@@ -39,6 +40,7 @@ static void pr_sdl_err()
 int octave = 1;
 
 int key = 0; // 0 is off, 1 is a C
+bool key_has_been_released = true;
 
 float cutoff = 1500;
 float resonance = 0.8;
@@ -52,7 +54,10 @@ float bend_target = 1.0;
 float dist_level = 0.6;
 float flip_level = 0.8;
 
-struct square_controller *sc_arr[4] = {};
+float env_to_cutoff = 100;
+float env_to_amp = 1.0;
+
+struct square_controller *sc_arr[5] = {};
 
 float pianokey_per_scancode[SDL_SCANCODE_COUNT] = {
     [SDL_SCANCODE_Z] = 12, [SDL_SCANCODE_S] = 13, [SDL_SCANCODE_X] = 14, [SDL_SCANCODE_D] = 15, [SDL_SCANCODE_C] = 16,
@@ -120,8 +125,9 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
     width = max(MIN_WIDTH, width);
     width = min(MAX_WIDTH, width);
     sample = 0.3 * render_pulse(current_frame, spec, bend * key_to_freq[key], width, new_period);
-    if (!key)
-        sample = 0.0;
+
+    // envelope
+    sample = sample * (1.0 - env_to_amp) + sample * env_to_amp * env_to_amp * envelope_get(current_frame);
 
     // filter
     sample = low_pass_filter_get_output(sample);
@@ -158,7 +164,8 @@ static bool render_sample_frames(long long *current_frame, int frames, char *buf
 
         if (*current_frame % 1000 == 0)
         {
-            int cut_freq = max(100, cutoff + 110 * cosine_render_sample(*current_frame, spec, 0.1));
+            int cut_freq = max(100, cutoff + env_to_cutoff * envelope_get(*current_frame) +
+                                        110 * cosine_render_sample(*current_frame, spec, 0.1));
             low_pass_filter_configure(cut_freq, resonance, spec->freq);
         }
 
@@ -257,7 +264,7 @@ static void draw_waveform(SDL_Renderer *renderer)
             square_controller_draw(renderer, sc);
         }
 
-        text_draw(renderer, "THIS IS A SYNTHESIZER!", WIDTH / 2 - 10 * 16, HEIGHT - 32, false);
+        text_draw(renderer, "THIS IS A SYNTHESIZER!", WIDTH / 2 - 5 * 16, HEIGHT - 32, false);
 
         SDL_RenderPresent(renderer);
         waveform_written = 0;
@@ -359,10 +366,10 @@ int main(int argc, char **argv)
                                  (struct linear_controller){&pwm_freq, 0.1, 10.0}, "PWDTH", "MOD FRQ");
     sc_arr[2] = square_controller_create(450, 10, 100, 100, (struct linear_controller){&dist_level, 0.1, 0.99},
                                          (struct linear_controller){&flip_level, 0.1, 0.99}, "DIST", "CLIP");
+    sc_arr[3] = square_controller_create(10, HEIGHT - 130, 100, 100, (struct linear_controller){&env_to_amp, 0.0, 1.0},
+                                         (struct linear_controller){&env_to_cutoff, 0.0, 110}, "TO AMP", "ENV TO CUT");
 
     text_init(renderer);
-
-    delay_init(&input_spec, 500);
 
     if (res = setup_video_timer(&video_timer))
         return res;
@@ -370,6 +377,10 @@ int main(int argc, char **argv)
     // AUDIO STUFF
 
     init_key_to_freq();
+
+    delay_init(&input_spec, 500);
+
+    envelope_init(10, 40, 0.7, 100, &input_spec);
 
     devId = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
     if (!devId)
@@ -431,14 +442,25 @@ int main(int argc, char **argv)
         {
             if (event.type == SDL_EVENT_KEY_DOWN)
             {
-                key = pianokey_per_scancode[event.key.scancode];
-                if (key != 0)
-                    key += 12 * octave;
+                int new_key = pianokey_per_scancode[event.key.scancode];
+                if (new_key != 0)
+                {
+                    new_key += 12 * octave;
+                    if (new_key != key && key_has_been_released)
+                    {
+                        envelope_start(current_frame);
+                        key_has_been_released = false;
+                    }
+                    key = new_key;
+                }
             }
             else if (event.type == SDL_EVENT_KEY_UP)
             {
                 if (key == 12 * octave + pianokey_per_scancode[event.key.scancode])
-                    key = 0;
+                {
+                    envelope_release(current_frame);
+                    key_has_been_released = true;
+                }
             }
             else if (event.type == SDL_EVENT_USER)
             {
