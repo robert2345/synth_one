@@ -431,19 +431,9 @@ int main(int argc, char **argv)
         {
             if (event.type == SDL_EVENT_KEY_DOWN)
             {
-                if (event.key.scancode == SDL_SCANCODE_UP)
-                    cutoff = min(20000, cutoff + 500);
-                else if (event.key.scancode == SDL_SCANCODE_DOWN)
-                {
-                    int reduction = min(500, cutoff);
-                    cutoff = max(100, cutoff - reduction);
-                }
-                else
-                {
-                    key = pianokey_per_scancode[event.key.scancode];
-                    if (key != 0)
-                        key += 12 * octave;
-                }
+                key = pianokey_per_scancode[event.key.scancode];
+                if (key != 0)
+                    key += 12 * octave;
             }
             else if (event.type == SDL_EVENT_KEY_UP)
             {
