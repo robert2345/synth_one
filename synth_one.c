@@ -15,6 +15,7 @@
 #include "distortion.h"
 #include "envelope.h"
 #include "low_pass_filter.h"
+#include "slide_controller.h"
 #include "square_controller.h"
 #include "text.h"
 
@@ -28,6 +29,8 @@
 
 #define MAX_WIDTH (0.5)
 #define MIN_WIDTH (0.1)
+
+#define MAX_DELAY_MS (750)
 
 static bool abort = false;
 
@@ -57,7 +60,10 @@ float flip_level = 0.8;
 float env_to_cutoff = 100;
 float env_to_amp = 1.0;
 
-struct square_controller *sc_arr[5] = {};
+float delay_ms = 100.0;
+
+struct square_controller *sqc_arr[5] = {};
+struct slide_controller *slc_arr[2] = {};
 
 float pianokey_per_scancode[SDL_SCANCODE_COUNT] = {
     [SDL_SCANCODE_Z] = 12, [SDL_SCANCODE_S] = 13, [SDL_SCANCODE_X] = 14, [SDL_SCANCODE_D] = 15, [SDL_SCANCODE_C] = 16,
@@ -137,12 +143,12 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
     sample = distort(sample, dist_level, flip_level);
 
     // echo
-    sample += 0.2 * delay_get_sample(300, spec);
+    sample += 0.2 * delay_get_sample(delay_ms, spec);
     delay_put_sample(sample);
 
     // chorus
-    float delay_ms = 3.0 + 1.0 * cosine_render_sample(current_frame, spec, 3);
-    sample += 0.2 * delay_get_sample(delay_ms, spec);
+    float chorus_delay_ms = 3.0 + 1.0 * cosine_render_sample(current_frame, spec, 3);
+    sample += 0.2 * delay_get_sample(chorus_delay_ms, spec);
 
     return sample;
 }
@@ -248,23 +254,28 @@ static void draw_waveform(SDL_Renderer *renderer)
 {
     int i;
     float time_scale_factor = 3.0;
-    struct square_controller *sc;
 
     // draw every 5:th pixel of the window in x
 
     pthread_mutex_lock(&mutex);
     if (waveform_written == WAVEFORM_LEN)
     {
+        struct square_controller *sqc;
+        struct slide_controller *slc;
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         SDL_RenderLines(renderer, points, WIDTH / X_STEP);
-        for (i = 0; (sc = sc_arr[i]); i++)
+        for (i = 0; (sqc = sqc_arr[i]); i++)
         {
-            square_controller_draw(renderer, sc);
+            square_controller_draw(renderer, sqc);
+        }
+        for (i = 0; (slc = slc_arr[i]); i++)
+        {
+            slide_controller_draw(renderer, slc);
         }
 
-        text_draw(renderer, "THIS IS A SYNTHESIZER!", WIDTH / 2 - 5 * 16, HEIGHT - 32, false);
+        text_draw(renderer, "THIS IS A SYNTHESIZER!", WIDTH / 2 - 12 * 16, HEIGHT / 2 - 8, false);
 
         SDL_RenderPresent(renderer);
         waveform_written = 0;
@@ -358,16 +369,17 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    sc_arr[0] =
-        square_controller_create(10, 10, 100, 100, (struct linear_controller){&resonance, 0.9, 0.01},
-                                 (struct linear_controller){&cutoff, input_spec.freq / 2.5, 50}, "RES", "CUTOFF");
-    sc_arr[1] =
-        square_controller_create(230, 10, 100, 100, (struct linear_controller){&base_width, MIN_WIDTH, MAX_WIDTH},
-                                 (struct linear_controller){&pwm_freq, 0.1, 10.0}, "PWDTH", "MOD FRQ");
-    sc_arr[2] = square_controller_create(450, 10, 100, 100, (struct linear_controller){&dist_level, 0.1, 0.99},
-                                         (struct linear_controller){&flip_level, 0.1, 0.99}, "DIST", "CLIP");
-    sc_arr[3] = square_controller_create(10, HEIGHT - 130, 100, 100, (struct linear_controller){&env_to_amp, 0.0, 1.0},
-                                         (struct linear_controller){&env_to_cutoff, 0.0, 110}, "TO AMP", "ENV TO CUT");
+    sqc_arr[0] = square_controller_create(10, 10, 100, 100, (struct linear_control){&resonance, 0.9, 0.01},
+                                          (struct linear_control){&cutoff, input_spec.freq / 2.5, 50}, "RES", "CUTOFF");
+    sqc_arr[1] = square_controller_create(230, 10, 100, 100, (struct linear_control){&base_width, MIN_WIDTH, MAX_WIDTH},
+                                          (struct linear_control){&pwm_freq, 0.1, 10.0}, "PWDTH", "MOD FRQ");
+    sqc_arr[2] = square_controller_create(450, 10, 100, 100, (struct linear_control){&dist_level, 0.1, 0.99},
+                                          (struct linear_control){&flip_level, 0.1, 0.99}, "DIST", "CLIP");
+    sqc_arr[3] = square_controller_create(10, HEIGHT - 130, 100, 100, (struct linear_control){&env_to_amp, 0.0, 1.0},
+                                          (struct linear_control){&env_to_cutoff, 0.0, 110}, "TO AMP", "ENV TO CUT");
+
+    slc_arr[0] =
+        slide_controller_create(130, HEIGHT - 130, 10, 100, (struct linear_control){&delay_ms, 0.5, MAX_DELAY_MS}, "DELAY MS");
 
     text_init(renderer);
 
@@ -378,7 +390,7 @@ int main(int argc, char **argv)
 
     init_key_to_freq();
 
-    delay_init(&input_spec, 500);
+    delay_init(&input_spec, MAX_DELAY_MS);
 
     envelope_init(10, 40, 0.7, 100, &input_spec);
 
@@ -469,28 +481,43 @@ int main(int argc, char **argv)
             else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
             {
                 int i;
-                struct square_controller *sc;
-                for (i = 0; (sc = sc_arr[i]); i++)
+                struct square_controller *sqc;
+                struct slide_controller *slc;
+                for (i = 0; (sqc = sqc_arr[i]); i++)
                 {
-                    square_controller_click(sc, event.button.x, event.button.y);
+                    square_controller_click(sqc, event.button.x, event.button.y);
+                }
+                for (i = 0; (slc = slc_arr[i]); i++)
+                {
+                    slide_controller_click(slc, event.button.x, event.button.y);
                 }
             }
             else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP)
             {
                 int i;
-                struct square_controller *sc;
-                for (i = 0; (sc = sc_arr[i]); i++)
+                struct square_controller *sqc;
+                struct slide_controller *slc;
+                for (i = 0; (sqc = sqc_arr[i]); i++)
                 {
-                    square_controller_unclick(sc);
+                    square_controller_unclick(sqc);
+                }
+                for (i = 0; (slc = slc_arr[i]); i++)
+                {
+                    slide_controller_unclick(slc);
                 }
             }
             else if (event.type == SDL_EVENT_MOUSE_MOTION)
             {
                 int i;
-                struct square_controller *sc;
-                for (i = 0; (sc = sc_arr[i]); i++)
+                struct square_controller *sqc;
+                struct slide_controller *slc;
+                for (i = 0; (sqc = sqc_arr[i]); i++)
                 {
-                    square_controller_move(sc, event.motion.x, event.motion.y);
+                    square_controller_move(sqc, event.motion.x, event.motion.y);
+                }
+                for (i = 0; (slc = slc_arr[i]); i++)
+                {
+                    slide_controller_move(slc, event.motion.x, event.motion.y);
                 }
             }
         }
