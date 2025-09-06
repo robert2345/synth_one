@@ -93,6 +93,7 @@ SDL_FPoint points[WIDTH / X_STEP];
 SDL_AudioStream *stream;
 char *buf;
 long long current_frame = 0;
+int sample_frames;
 int buffer_frames;
 size_t frame_size;
 const SDL_AudioSpec input_spec = {.channels = 1, .format = SDL_AUDIO_S16, .freq = 44100};
@@ -229,11 +230,15 @@ static void fill_audio_buffer(union sigval)
     pthread_mutex_lock(&mutex);
     // check how much is in buffer
     // render rest
-    int frames = buffer_frames - calc_frames_queued(stream, &input_spec);
-    render_sample_frames(&current_frame, frames, buf, &input_spec);
-    if (!SDL_PutAudioStreamData(stream, buf, frame_size * frames))
+    int frames = sample_frames - calc_frames_queued(stream, &input_spec);
+    frames = min(frames, buffer_frames);
+    if (frames > 0)
     {
-        pr_sdl_err();
+        render_sample_frames(&current_frame, frames, buf, &input_spec);
+        if (!SDL_PutAudioStreamData(stream, buf, frame_size * frames))
+        {
+            pr_sdl_err();
+        }
     }
     pthread_mutex_unlock(&mutex);
 }
@@ -293,7 +298,7 @@ static void sig_handler(int signum)
 static int setup_audio_timer(timer_t *t)
 {
     struct sigevent sevnt = {.sigev_notify = SIGEV_THREAD, .sigev_notify_function = fill_audio_buffer};
-    struct itimerspec new_value = {.it_interval = {.tv_nsec = buffer_frames / 8 * 1000000000ull / input_spec.freq}};
+    struct itimerspec new_value = {.it_interval = {.tv_nsec = buffer_frames / 2 * 1000000000ull / input_spec.freq}};
     new_value.it_value = new_value.it_interval;
 
     int ret = timer_create(CLOCK_MONOTONIC, &sevnt, t);
@@ -337,7 +342,6 @@ int main(int argc, char **argv)
     SDL_AudioDeviceID devId;
     bool res;
     SDL_AudioSpec output_spec;
-    int sample_frames;
     SDL_Window *window;
     timer_t audio_timer;
     timer_t video_timer;
@@ -378,8 +382,8 @@ int main(int argc, char **argv)
     sqc_arr[3] = square_controller_create(10, HEIGHT - 130, 100, 100, (struct linear_control){&env_to_amp, 0.0, 1.0},
                                           (struct linear_control){&env_to_cutoff, 0.0, 110}, "TO AMP", "ENV TO CUT");
 
-    slc_arr[0] =
-        slide_controller_create(130, HEIGHT - 130, 10, 100, (struct linear_control){&delay_ms, 0.5, MAX_DELAY_MS}, "DELAY MS");
+    slc_arr[0] = slide_controller_create(130, HEIGHT - 130, 10, 100,
+                                         (struct linear_control){&delay_ms, 0.5, MAX_DELAY_MS}, "DELAY MS");
 
     text_init(renderer);
 
@@ -406,7 +410,7 @@ int main(int argc, char **argv)
         pr_sdl_err();
         return 3;
     }
-    buffer_frames = sample_frames * 2;
+    buffer_frames = sample_frames / 2;
     frame_size = calc_frame_size(&input_spec);
     printf("Frame size %ld\n", frame_size);
     buf = malloc(buffer_frames * frame_size);
@@ -521,6 +525,7 @@ int main(int argc, char **argv)
                 }
             }
         }
+        usleep(750);
     }
 
     timer_delete(video_timer);
