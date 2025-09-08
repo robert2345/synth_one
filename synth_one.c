@@ -43,7 +43,7 @@ static void pr_sdl_err()
     SDL_ClearError();
 }
 
-int octave = 1;
+int octave = 0;
 
 int key = 0; // 0 is off, 1 is a C
 bool key_has_been_released = true;
@@ -60,10 +60,10 @@ float bend_target = 1.0;
 float dist_level = 1.0;
 float flip_level = 1.1;
 
-float env_to_cutoff = 600;
+float env_to_cutoff = 1000;
 float env_to_amp = 1.0;
 
-float delay_ms = 100.0;
+float delay_ms = 600.0;
 
 struct square_controller *sqc_arr[5] = {};
 struct slide_controller *slc_arr[2] = {};
@@ -140,6 +140,9 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
     sample = sample * (1.0 - env_to_amp) + sample * env_to_amp * env_to_amp * envelope_get(current_frame);
 
     // filter
+    int cut_freq = max(150, cutoff - env_to_cutoff / 2 + env_to_cutoff * envelope_get(current_frame) +
+                                110 * cosine_render_sample(current_frame, spec, 0.1));
+    low_pass_filter_configure(cut_freq, resonance, spec->freq);
     sample = low_pass_filter_get_output(sample);
 
     // distort
@@ -173,13 +176,6 @@ static bool render_sample_frames(long long *current_frame, int frames, char *buf
     for (s = 0; s < frames; s++)
     {
         bool new_period;
-
-        if (*current_frame % 100 == 0)
-        {
-            int cut_freq = max(150, (cutoff - env_to_cutoff) + env_to_cutoff * envelope_get(*current_frame) +
-                                        110 * cosine_render_sample(*current_frame, spec, 0.1));
-            low_pass_filter_configure(cut_freq, resonance, spec->freq);
-        }
 
         // what is going on with channels here? only one buffer so it seems a bit
         // broken if multiple channels.
@@ -385,7 +381,7 @@ int main(int argc, char **argv)
     sqc_arr[2] = square_controller_create(450, 10, 100, 100, (struct linear_control){&dist_level, 0.1, 0.999},
                                           (struct linear_control){&flip_level, 0.1, 1.1}, "DIST", "CLIP");
     sqc_arr[3] = square_controller_create(10, HEIGHT - 130, 100, 100, (struct linear_control){&env_to_amp, 0.0, 1.0},
-                                          (struct linear_control){&env_to_cutoff, 0.0, 800.0}, "TO AMP", "ENV TO CUT");
+                                          (struct linear_control){&env_to_cutoff, 0.0, 4000.0}, "TO AMP", "ENV TO CUT");
 
     slc_arr[0] = slide_controller_create(130, HEIGHT - 130, 10, 100,
                                          (struct linear_control){&delay_ms, 0.5, MAX_DELAY_MS}, "DELAY MS");
