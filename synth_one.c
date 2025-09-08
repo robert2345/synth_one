@@ -48,11 +48,11 @@ int octave = 1;
 int key = 0; // 0 is off, 1 is a C
 bool key_has_been_released = true;
 
-float cutoff = 1500;
-float resonance = 0.8;
+float cutoff = 1000;
+float resonance = 0.9;
 
 float base_width = MAX_WIDTH;
-float pwm_freq = 1.0;
+float pwm_freq = 0.3;
 
 float bend = 1.0;
 float bend_target = 1.0;
@@ -60,7 +60,7 @@ float bend_target = 1.0;
 float dist_level = 0.6;
 float flip_level = 0.8;
 
-float env_to_cutoff = 100;
+float env_to_cutoff = 600;
 float env_to_amp = 1.0;
 
 float delay_ms = 100.0;
@@ -383,7 +383,7 @@ int main(int argc, char **argv)
     sqc_arr[2] = square_controller_create(450, 10, 100, 100, (struct linear_control){&dist_level, 0.1, 0.99},
                                           (struct linear_control){&flip_level, 0.1, 0.99}, "DIST", "CLIP");
     sqc_arr[3] = square_controller_create(10, HEIGHT - 130, 100, 100, (struct linear_control){&env_to_amp, 0.0, 1.0},
-                                          (struct linear_control){&env_to_cutoff, 0.0, 110}, "TO AMP", "ENV TO CUT");
+                                          (struct linear_control){&env_to_cutoff, 0.0, 800.0}, "TO AMP", "ENV TO CUT");
 
     slc_arr[0] = slide_controller_create(130, HEIGHT - 130, 10, 100,
                                          (struct linear_control){&delay_ms, 0.5, MAX_DELAY_MS}, "DELAY MS");
@@ -468,7 +468,7 @@ int main(int argc, char **argv)
                 if (new_key != 0)
                 {
                     new_key += 12 * octave;
-                    if (new_key != key && key_has_been_released)
+                    if (new_key != key || key_has_been_released)
                     {
                         envelope_start(current_frame);
                         key_has_been_released = false;
