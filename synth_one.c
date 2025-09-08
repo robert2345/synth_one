@@ -15,6 +15,7 @@
 #include "distortion.h"
 #include "envelope.h"
 #include "low_pass_filter.h"
+#include "midi.h"
 #include "slide_controller.h"
 #include "square_controller.h"
 #include "text.h"
@@ -30,9 +31,11 @@
 #define MAX_WIDTH (0.5)
 #define MIN_WIDTH (0.1)
 
+#define NBR_KEYS (88)
+
 #define MAX_DELAY_MS (750)
 
-static bool abort = false;
+static bool synth_abort = false;
 
 static void pr_sdl_err()
 {
@@ -75,7 +78,7 @@ float pianokey_per_scancode[SDL_SCANCODE_COUNT] = {
 
 };
 
-float key_to_freq[88] = {
+float key_to_freq[NBR_KEYS] = {
 
 };
 
@@ -204,7 +207,7 @@ static bool render_sample_frames(long long *current_frame, int frames, char *buf
 
         // write to visualisation buffer
         {
-            int samples_per_period = spec->freq / (bend * key_to_freq[key]);
+            int samples_per_period = max(WAVEFORM_LEN, spec->freq / (bend * key_to_freq[key]));
             bool on_grid = (*current_frame % (2 * samples_per_period / WAVEFORM_LEN) == 0) &&
                            waveform_written < WAVEFORM_LEN && waveform_written != 0;
             if ((new_period && (waveform_written == 0)) || on_grid)
@@ -292,7 +295,7 @@ static void draw_waveform(SDL_Renderer *renderer)
 static void sig_handler(int signum)
 {
     printf("ABORT!\n");
-    abort = true;
+    synth_abort = true;
 }
 
 static int setup_audio_timer(timer_t *t)
@@ -390,13 +393,16 @@ int main(int argc, char **argv)
     if (res = setup_video_timer(&video_timer))
         return res;
 
+    // MIDI STUFF
+    snd_rawmidi_t *midi_in = midi_start();
+
     // AUDIO STUFF
 
     init_key_to_freq();
 
     delay_init(&input_spec, MAX_DELAY_MS);
 
-    envelope_init(10, 40, 0.7, 100, &input_spec);
+    envelope_init(1, 50, 0.7, 100, &input_spec);
 
     devId = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
     if (!devId)
@@ -452,9 +458,9 @@ int main(int argc, char **argv)
         return res;
 
     SDL_Event event;
-    while (!abort)
+    while (!synth_abort)
     {
-        if (SDL_PollEvent(&event))
+        while (SDL_PollEvent(&event))
         {
             if (event.type == SDL_EVENT_KEY_DOWN)
             {
@@ -525,8 +531,34 @@ int main(int argc, char **argv)
                 }
             }
         }
+
+        struct midi_message msg;
+        while (midi_get(midi_in, &msg))
+        {
+            if (msg.type == MIDI_MSG_NOTE_ON)
+            {
+                int new_key = msg.note.key;
+                // notes higher that 0x53 are really bad so no need to even try
+                if (new_key < 0x53 && new_key != key && key_has_been_released)
+                {
+                    envelope_start(current_frame);
+                    key_has_been_released = false;
+                }
+                key = new_key;
+            }
+            else if (msg.type == MIDI_MSG_NOTE_OFF)
+            {
+                if (key == msg.note.key)
+                {
+                    envelope_release(current_frame);
+                    key_has_been_released = true;
+                }
+            }
+        }
         usleep(750);
     }
+
+    midi_stop(midi_in);
 
     timer_delete(video_timer);
     timer_delete(audio_timer);
