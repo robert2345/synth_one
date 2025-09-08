@@ -57,8 +57,8 @@ float pwm_freq = 0.3;
 float bend = 1.0;
 float bend_target = 1.0;
 
-float dist_level = 0.6;
-float flip_level = 0.8;
+float dist_level = 1.0;
+float flip_level = 1.1;
 
 float env_to_cutoff = 600;
 float env_to_amp = 1.0;
@@ -154,6 +154,8 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
     float chorus_delay_ms = 3.0 + 1.0 * cosine_render_sample(current_frame, spec, 3);
     sample += 0.2 * delay_get_sample(chorus_delay_ms, spec);
 
+    sample = distort(sample, 0.999, 100.0);
+
     return sample;
 }
 
@@ -172,9 +174,9 @@ static bool render_sample_frames(long long *current_frame, int frames, char *buf
     {
         bool new_period;
 
-        if (*current_frame % 1000 == 0)
+        if (*current_frame % 100 == 0)
         {
-            int cut_freq = max(100, cutoff + env_to_cutoff * envelope_get(*current_frame) +
+            int cut_freq = max(150, (cutoff - env_to_cutoff) + env_to_cutoff * envelope_get(*current_frame) +
                                         110 * cosine_render_sample(*current_frame, spec, 0.1));
             low_pass_filter_configure(cut_freq, resonance, spec->freq);
         }
@@ -380,8 +382,8 @@ int main(int argc, char **argv)
                                           (struct linear_control){&cutoff, input_spec.freq / 2.5, 50}, "RES", "CUTOFF");
     sqc_arr[1] = square_controller_create(230, 10, 100, 100, (struct linear_control){&base_width, MIN_WIDTH, MAX_WIDTH},
                                           (struct linear_control){&pwm_freq, 0.1, 10.0}, "PWDTH", "MOD FRQ");
-    sqc_arr[2] = square_controller_create(450, 10, 100, 100, (struct linear_control){&dist_level, 0.1, 0.99},
-                                          (struct linear_control){&flip_level, 0.1, 0.99}, "DIST", "CLIP");
+    sqc_arr[2] = square_controller_create(450, 10, 100, 100, (struct linear_control){&dist_level, 0.1, 0.999},
+                                          (struct linear_control){&flip_level, 0.1, 1.1}, "DIST", "CLIP");
     sqc_arr[3] = square_controller_create(10, HEIGHT - 130, 100, 100, (struct linear_control){&env_to_amp, 0.0, 1.0},
                                           (struct linear_control){&env_to_cutoff, 0.0, 800.0}, "TO AMP", "ENV TO CUT");
 

@@ -10,7 +10,7 @@ static float ic2eq = 0;
 static float ic1eq = 0;
 static float a2 = 0;
 static float a1 = 0.0;
-static int cutoff = 4000;
+static float cutoff = 4000;
 
 void low_pass_filter_configure(float cut_freq, float res, int samplerate)
 {
