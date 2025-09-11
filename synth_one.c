@@ -25,6 +25,8 @@
 #define X_STEP (5)
 #define WAVEFORM_LEN (WIDTH / X_STEP)
 
+#define NBR_VOICES (8)
+
 #define min(x, y) ((x) < (y) ? x : y)
 #define max(x, y) ((x) < (y) ? y : x)
 
@@ -43,10 +45,14 @@ static void pr_sdl_err()
     SDL_ClearError();
 }
 
-int octave = 0;
+struct voice {
+	int key; // 0 is off, 1 is a C
+	bool released;
+};
 
-int key = 0; // 0 is off, 1 is a C
-bool key_has_been_released = true;
+struct voice voices[NBR_VOICES] = {};
+
+int octave = 0;
 
 float cutoff = 1000;
 float resonance = 0.9;
@@ -134,7 +140,7 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
 
     width = max(MIN_WIDTH, width);
     width = min(MAX_WIDTH, width);
-    sample = 0.3 * render_pulse(current_frame, spec, bend * key_to_freq[key], width, new_period);
+    sample = 0.3 * render_pulse(current_frame, spec, bend * key_to_freq[voices[0].key], width, new_period);
 
     // envelope
     sample = sample * (1.0 - env_to_amp) + sample * env_to_amp * env_to_amp * envelope_get(current_frame);
@@ -205,7 +211,7 @@ static bool render_sample_frames(long long *current_frame, int frames, char *buf
 
         // write to visualisation buffer
         {
-            int samples_per_period = max(WAVEFORM_LEN, spec->freq / (bend * key_to_freq[key]));
+            int samples_per_period = max(WAVEFORM_LEN, spec->freq / (bend * key_to_freq[voices[0].key]));
             bool on_grid = (*current_frame % (2 * samples_per_period / WAVEFORM_LEN) == 0) &&
                            waveform_written < WAVEFORM_LEN && waveform_written != 0;
             if ((new_period && (waveform_written == 0)) || on_grid)
@@ -466,20 +472,20 @@ int main(int argc, char **argv)
                 if (new_key != 0)
                 {
                     new_key += 12 * octave;
-                    if (new_key != key || key_has_been_released)
+                    if (new_key != voices[0].key || voices[0].released)
                     {
                         envelope_start(current_frame);
-                        key_has_been_released = false;
+                        voices[0].released = false;
                     }
-                    key = new_key;
+                    voices[0].key = new_key;
                 }
             }
             else if (event.type == SDL_EVENT_KEY_UP)
             {
-                if (key == 12 * octave + pianokey_per_scancode[event.key.scancode])
+                if (voices[0].key == 12 * octave + pianokey_per_scancode[event.key.scancode])
                 {
                     envelope_release(current_frame);
-                    key_has_been_released = true;
+                    voices[0].released = true;
                 }
             }
             else if (event.type == SDL_EVENT_USER)
@@ -537,19 +543,19 @@ int main(int argc, char **argv)
             {
                 int new_key = msg.note.key;
                 // notes higher that 0x53 are really bad so no need to even try
-                if (new_key < 0x53 && new_key != key && key_has_been_released)
+                if (new_key < 0x53 && new_key != voices[0].key && voices[0].released)
                 {
                     envelope_start(current_frame);
-                    key_has_been_released = false;
+                    voices[0].released = false;
                 }
-                key = new_key;
+                voices[0].key = new_key;
             }
             else if (msg.type == MIDI_MSG_NOTE_OFF)
             {
-                if (key == msg.note.key)
+                if (voices[0].key == msg.note.key)
                 {
                     envelope_release(current_frame);
-                    key_has_been_released = true;
+                    voices[0].released = true;
                 }
             }
         }
