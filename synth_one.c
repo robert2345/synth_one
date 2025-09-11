@@ -45,9 +45,10 @@ static void pr_sdl_err()
     SDL_ClearError();
 }
 
-struct voice {
-	int key; // 0 is off, 1 is a C
-	bool released;
+struct voice
+{
+    int key; // 0 is off, 1 is a C
+    bool released;
 };
 
 struct voice voices[NBR_VOICES] = {};
@@ -110,6 +111,26 @@ const SDL_AudioSpec input_spec = {.channels = 1, .format = SDL_AUDIO_S16, .freq 
 static size_t calc_frame_size(const SDL_AudioSpec *spec)
 {
     return spec->channels * SDL_AUDIO_BYTESIZE(spec->format);
+}
+
+static void key_press(int key)
+{
+    // notes higher that 0x53 are really bad so no need to even try
+    if (key < 0x53 && (key != voices[0].key || voices[0].released))
+    {
+        envelope_start(current_frame);
+        voices[0].released = false;
+    }
+    voices[0].key = key;
+}
+
+static void key_release(int key)
+{
+    if (voices[0].key == key)
+    {
+        envelope_release(current_frame);
+        voices[0].released = true;
+    }
 }
 
 static float render_pulse(const long long current_frame, const SDL_AudioSpec *spec, float freq, float width,
@@ -472,12 +493,7 @@ int main(int argc, char **argv)
                 if (new_key != 0)
                 {
                     new_key += 12 * octave;
-                    if (new_key != voices[0].key || voices[0].released)
-                    {
-                        envelope_start(current_frame);
-                        voices[0].released = false;
-                    }
-                    voices[0].key = new_key;
+                    key_press(new_key);
                 }
             }
             else if (event.type == SDL_EVENT_KEY_UP)
@@ -541,22 +557,11 @@ int main(int argc, char **argv)
         {
             if (msg.type == MIDI_MSG_NOTE_ON)
             {
-                int new_key = msg.note.key;
-                // notes higher that 0x53 are really bad so no need to even try
-                if (new_key < 0x53 && new_key != voices[0].key && voices[0].released)
-                {
-                    envelope_start(current_frame);
-                    voices[0].released = false;
-                }
-                voices[0].key = new_key;
+                key_press(msg.note.key);
             }
             else if (msg.type == MIDI_MSG_NOTE_OFF)
             {
-                if (voices[0].key == msg.note.key)
-                {
-                    envelope_release(current_frame);
-                    voices[0].released = true;
-                }
+                key_release(msg.note.key);
             }
         }
         usleep(750);
