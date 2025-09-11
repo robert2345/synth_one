@@ -6,6 +6,7 @@
 #include <math.h>
 #include <pthread.h>
 #include <signal.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <time.h>
 #include <unistd.h>
@@ -48,7 +49,9 @@ static void pr_sdl_err()
 struct voice
 {
     int key; // 0 is off, 1 is a C
-    bool released;
+	     float period_position;
+    long long released;
+    long long pressed;
 };
 
 struct voice voices[NBR_VOICES] = {};
@@ -115,32 +118,70 @@ static size_t calc_frame_size(const SDL_AudioSpec *spec)
 
 static void key_press(int key)
 {
+    struct voice *oldest_voice = &voices[0];
+
     // notes higher that 0x53 are really bad so no need to even try
-    if (key < 0x53 && (key != voices[0].key || voices[0].released))
+    if (key >= 0x35)
+        return;
+    // find oldest empty spot and if key is already in the array
+    for (int i = 0; i < NBR_VOICES; i++)
     {
-        envelope_start(current_frame);
-        voices[0].released = false;
+        struct voice *voice = &voices[i];
+        // compare current to oldest
+        if (oldest_voice->released > voice->released)
+        {
+            oldest_voice = voice;
+        }
+        else if (oldest_voice->released == voice->released && oldest_voice->pressed > voice->pressed)
+        {
+            oldest_voice = voice;
+        }
+
+        if (voice->key == key)
+        {
+            if (voice->released < current_frame)
+            {
+                oldest_voice = voice;
+                break;
+            }
+            return;
+        }
     }
-    voices[0].key = key;
+    printf("done pressing\n");
+
+    envelope_start(current_frame);
+    oldest_voice->released = INT64_MAX;
+    oldest_voice->pressed = current_frame;
+
+    oldest_voice->key = key;
 }
 
 static void key_release(int key)
 {
-    if (voices[0].key == key)
+    // find oldest empty spot and if key is already in the array
+    for (int i = 0; i < NBR_VOICES; i++)
     {
-        envelope_release(current_frame);
-        voices[0].released = true;
+        struct voice *voice = &voices[i];
+        if (voice->key == key)
+        {
+            if (voice->pressed < current_frame)
+            {
+                envelope_release(current_frame);
+                voice->released = current_frame;
+                return;
+            }
+        }
     }
+    printf("done releasing\n");
 }
 
-static float render_pulse(const long long current_frame, const SDL_AudioSpec *spec, float freq, float width,
+static float render_pulse(const long long current_frame, struct voice *voice, const SDL_AudioSpec *spec, float freq, float width,
                           bool *new_period)
 {
-    static float period_position = 0.0;
-    period_position += freq / spec->freq;
-    if (period_position > 1.0)
+    voice->period_position += freq / spec->freq;
+    if (voice->period_position > 1.0)
     {
-        period_position -= 1.0;
+        voice->period_position -= 1.0;
         *new_period = true;
     }
     else
@@ -148,7 +189,7 @@ static float render_pulse(const long long current_frame, const SDL_AudioSpec *sp
         *new_period = false;
     }
 
-    if (period_position > width)
+    if (voice->period_position > width)
         return -1.0;
     else
         return 1.0;
@@ -156,12 +197,17 @@ static float render_pulse(const long long current_frame, const SDL_AudioSpec *sp
 
 static float render_sample(const long long current_frame, const SDL_AudioSpec *spec, bool *new_period)
 {
-    float sample;
+    float sample = 0.0;
     float width = base_width + 0.1 * cosine_render_sample(current_frame, spec, pwm_freq);
 
     width = max(MIN_WIDTH, width);
     width = min(MAX_WIDTH, width);
-    sample = 0.3 * render_pulse(current_frame, spec, bend * key_to_freq[voices[0].key], width, new_period);
+    for (int i = 0; i < NBR_VOICES; i++)
+    {
+        struct voice *voice = &voices[i];
+	if (voice->key !=0)
+		sample += 0.3/NBR_VOICES * render_pulse(current_frame, voice, spec, bend * key_to_freq[voice->key], width, new_period);
+    }
 
     // envelope
     sample = sample * (1.0 - env_to_amp) + sample * env_to_amp * env_to_amp * envelope_get(current_frame);
