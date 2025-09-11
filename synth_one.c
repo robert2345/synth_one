@@ -49,9 +49,11 @@ static void pr_sdl_err()
 struct voice
 {
     int key; // 0 is off, 1 is a C
-	     float period_position;
+    float period_position;
     long long released;
     long long pressed;
+    struct env_state env;
+    struct filter_state filter;
 };
 
 struct voice voices[NBR_VOICES] = {};
@@ -147,9 +149,8 @@ static void key_press(int key)
             return;
         }
     }
-    printf("done pressing\n");
 
-    envelope_start(current_frame);
+    envelope_start(&oldest_voice->env, current_frame);
     oldest_voice->released = INT64_MAX;
     oldest_voice->pressed = current_frame;
 
@@ -158,7 +159,6 @@ static void key_press(int key)
 
 static void key_release(int key)
 {
-    // find oldest empty spot and if key is already in the array
     for (int i = 0; i < NBR_VOICES; i++)
     {
         struct voice *voice = &voices[i];
@@ -166,17 +166,17 @@ static void key_release(int key)
         {
             if (voice->pressed < current_frame)
             {
-                envelope_release(current_frame);
+                envelope_release(&voice->env, current_frame);
                 voice->released = current_frame;
+                voice->pressed = INT64_MAX;
                 return;
             }
         }
     }
-    printf("done releasing\n");
 }
 
-static float render_pulse(const long long current_frame, struct voice *voice, const SDL_AudioSpec *spec, float freq, float width,
-                          bool *new_period)
+static float render_pulse(const long long current_frame, struct voice *voice, const SDL_AudioSpec *spec, float freq,
+                          float width, bool *new_period)
 {
     voice->period_position += freq / spec->freq;
     if (voice->period_position > 1.0)
@@ -205,18 +205,22 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
     for (int i = 0; i < NBR_VOICES; i++)
     {
         struct voice *voice = &voices[i];
-	if (voice->key !=0)
-		sample += 0.3/NBR_VOICES * render_pulse(current_frame, voice, spec, bend * key_to_freq[voice->key], width, new_period);
+        if (voice->key != 0)
+        {
+            float raw_sample =
+                0.3 / NBR_VOICES *
+                render_pulse(current_frame, voice, spec, bend * key_to_freq[voice->key], width, new_period);
+            // envelope
+            raw_sample = raw_sample * (1.0 - env_to_amp) +
+                          raw_sample * env_to_amp * envelope_get(&voice->env, current_frame);
+            // filter
+            int cut_freq =
+                max(150, cutoff - env_to_cutoff / 2 + env_to_cutoff * envelope_get(&voice->env, current_frame) +
+                             110 * cosine_render_sample(current_frame, spec, 0.1));
+            low_pass_filter_configure(&voice->filter, cutoff, resonance, spec->freq);
+            sample += low_pass_filter_get_output(&voice->filter, raw_sample);
+        }
     }
-
-    // envelope
-    sample = sample * (1.0 - env_to_amp) + sample * env_to_amp * env_to_amp * envelope_get(current_frame);
-
-    // filter
-    int cut_freq = max(150, cutoff - env_to_cutoff / 2 + env_to_cutoff * envelope_get(current_frame) +
-                                110 * cosine_render_sample(current_frame, spec, 0.1));
-    low_pass_filter_configure(cut_freq, resonance, spec->freq);
-    sample = low_pass_filter_get_output(sample);
 
     // distort
 
@@ -473,7 +477,14 @@ int main(int argc, char **argv)
 
     delay_init(&input_spec, MAX_DELAY_MS);
 
-    envelope_init(1, 50, 0.7, 100, &input_spec);
+    for (int i = 0; i < NBR_VOICES; i++)
+    {
+        voices[i].pressed = 0;
+        voices[i].released = 0;
+
+        envelope_init(&voices[i].env, 15, 50, 0.7, 50, &input_spec);
+	low_pass_filter_init(&voices[i].filter, res, cutoff, input_spec.freq);
+    }
 
     devId = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
     if (!devId)
@@ -544,10 +555,11 @@ int main(int argc, char **argv)
             }
             else if (event.type == SDL_EVENT_KEY_UP)
             {
-                if (voices[0].key == 12 * octave + pianokey_per_scancode[event.key.scancode])
+                int new_key = pianokey_per_scancode[event.key.scancode];
+                if (new_key != 0)
                 {
-                    envelope_release(current_frame);
-                    voices[0].released = true;
+                    new_key += 12 * octave;
+                    key_release(new_key);
                 }
             }
             else if (event.type == SDL_EVENT_USER)
