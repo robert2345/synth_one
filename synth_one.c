@@ -72,13 +72,18 @@ float bend_target = 1.0;
 float dist_level = 1.0;
 float flip_level = 1.1;
 
+float A = 5;   // ms
+float D = 25;  // ms
+float S = 0.5; // amplitude factor
+float R = 250; // ms
+
 float env_to_cutoff = 1000;
 float env_to_amp = 1.0;
 
 float delay_ms = 600.0;
 
 struct square_controller *sqc_arr[5] = {};
-struct slide_controller *slc_arr[2] = {};
+struct slide_controller *slc_arr[6] = {};
 
 float pianokey_per_scancode[SDL_SCANCODE_COUNT] = {
     [SDL_SCANCODE_Z] = 12, [SDL_SCANCODE_S] = 13, [SDL_SCANCODE_X] = 14, [SDL_SCANCODE_D] = 15, [SDL_SCANCODE_C] = 16,
@@ -212,11 +217,11 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
                 render_pulse(current_frame, voice, spec, bend * key_to_freq[voice->key], width, new_period);
             // envelope
             raw_sample = raw_sample * (1.0 - env_to_amp) +
-                          raw_sample * env_to_amp * envelope_get(&voice->env, current_frame);
+                         raw_sample * env_to_amp * envelope_get(&voice->env, A, D, S, R, current_frame);
             // filter
-            int cut_freq =
-                max(150, cutoff - env_to_cutoff / 2 + env_to_cutoff * envelope_get(&voice->env, current_frame) +
-                             110 * cosine_render_sample(current_frame, spec, 0.1));
+            int cut_freq = max(150, cutoff - env_to_cutoff / 2 +
+                                        env_to_cutoff * envelope_get(&voice->env, A, D, S, R, current_frame) +
+                                        110 * cosine_render_sample(current_frame, spec, 0.1));
             low_pass_filter_configure(&voice->filter, cutoff, resonance, spec->freq);
             sample += low_pass_filter_get_output(&voice->filter, raw_sample);
         }
@@ -463,6 +468,14 @@ int main(int argc, char **argv)
     slc_arr[0] = slide_controller_create(130, HEIGHT - 130, 10, 100,
                                          (struct linear_control){&delay_ms, 0.5, MAX_DELAY_MS}, "DELAY MS");
 
+    slc_arr[1] =
+        slide_controller_create(160, HEIGHT - 130, 10, 100, (struct linear_control){&A, 0.0, 2000}, "Attack [ms]");
+    slc_arr[2] =
+        slide_controller_create(190, HEIGHT - 130, 10, 100, (struct linear_control){&D, 0.0, 2000}, "Decay [ms]");
+    slc_arr[3] =
+        slide_controller_create(220, HEIGHT - 130, 10, 100, (struct linear_control){&S, 0.0, 1.0}, "Sustain level");
+    slc_arr[4] =
+        slide_controller_create(250, HEIGHT - 130, 10, 100, (struct linear_control){&R, 0.0, 2000}, "Attack [ms]");
     text_init(renderer);
 
     if (res = setup_video_timer(&video_timer))
@@ -482,8 +495,8 @@ int main(int argc, char **argv)
         voices[i].pressed = 0;
         voices[i].released = 0;
 
-        envelope_init(&voices[i].env, 15, 50, 0.7, 50, &input_spec);
-	low_pass_filter_init(&voices[i].filter, res, cutoff, input_spec.freq);
+        envelope_init(&voices[i].env, &input_spec);
+        low_pass_filter_init(&voices[i].filter, res, cutoff, input_spec.freq);
     }
 
     devId = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);

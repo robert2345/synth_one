@@ -5,23 +5,15 @@
 #define min(x, y) ((x) < (y) ? x : y)
 #define max(x, y) ((x) < (y) ? y : x)
 
-int attack_frames = 10;
-int decay_frames = 10;
-float sustain_value = 0.7;
-int release_frames = 1;
-
-static float ms_to_frames(SDL_AudioSpec *spec, float ms)
+static float ms_to_frames(int sample_rate, float ms)
 {
-    return ms * spec->freq / 1000;
+    return ms * sample_rate / 1000;
 }
 
-void envelope_init(struct env_state *state, float A, float D, float S, float R, SDL_AudioSpec *spec)
+void envelope_init(struct env_state *state, SDL_AudioSpec *spec)
 {
-    attack_frames = ms_to_frames(spec, A);
-    decay_frames = ms_to_frames(spec, D);
-    sustain_value = S;
-    release_frames = ms_to_frames(spec, R);
 
+    state->sample_rate = spec->freq;
     state->start_frame = -88200;
     state->release_frame = -44200;
     state->release_level = 0.5;
@@ -37,8 +29,12 @@ void envelope_release(struct env_state *state, long long frame)
     state->release_frame = frame;
 }
 
-float envelope_get(struct env_state *state, long long frame)
+float envelope_get(struct env_state *state, float A, float D, float S, float R, long long frame)
 {
+
+    int decay_frames = ms_to_frames(state->sample_rate, D);
+    float sustain_value = S;
+
     float ret_level;
     if (frame < state->start_frame)
     {
@@ -48,6 +44,7 @@ float envelope_get(struct env_state *state, long long frame)
 
     if (state->start_frame > state->release_frame)
     {
+        int attack_frames = ms_to_frames(state->sample_rate, A);
         long long decay_start = state->start_frame + attack_frames;
         long long sustain_start = state->start_frame + attack_frames + decay_frames;
         if (frame > sustain_start)
@@ -68,6 +65,7 @@ float envelope_get(struct env_state *state, long long frame)
     else
     {
         // Release
+        int release_frames = ms_to_frames(state->sample_rate, R);
         float diff = frame - state->release_frame;
         return max(0.0, state->release_level * (1.0 - diff / (release_frames)));
     }
