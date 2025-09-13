@@ -27,6 +27,7 @@
 #define WAVEFORM_LEN (WIDTH / X_STEP)
 
 #define NBR_VOICES (8)
+#define MAX_OSC_COUNT (4) // per voice
 
 #define min(x, y) ((x) < (y) ? x : y)
 #define max(x, y) ((x) < (y) ? y : x)
@@ -41,6 +42,13 @@
 #define MAX_PARAMS_PER_GROUP (8)
 #define MAX_GROUPS (8)
 
+enum osc_type
+{
+    OSC_TYPE_PULSE,
+    OSC_TYPE_SAW,
+    OSC_TYPE_COUNT,
+};
+
 static bool synth_abort = false;
 
 static void pr_sdl_err()
@@ -52,7 +60,7 @@ static void pr_sdl_err()
 struct voice
 {
     int key; // 0 is off, 1 is a C
-    float period_position;
+    float period_position[MAX_OSC_COUNT];
     long long released;
     long long pressed;
     struct env_state env;
@@ -83,6 +91,29 @@ struct ctrl_param octave = {
     .quantized_to_int = true,
 };
 
+struct ctrl_param osc_type = {
+    .label = "SAW/PULSE",
+    .value = OSC_TYPE_PULSE,
+    .min = OSC_TYPE_SAW,
+    .max = OSC_TYPE_PULSE,
+    .quantized_to_int = true,
+};
+
+struct ctrl_param osc_cnt = {
+    .label = "OSC COUNT",
+    .value = 1,
+    .min = 1,
+    .max = MAX_OSC_COUNT,
+    .quantized_to_int = true,
+};
+
+struct ctrl_param osc_detune_step = {
+    .label = "DETUNE CENTS",
+    .value = 0,
+    .min = 0,
+    .max = 50,
+};
+
 struct ctrl_param cutoff = {
     .label = "CUTOFF",
     .value = 1000,
@@ -102,87 +133,87 @@ struct ctrl_param base_width = {
     .max = MAX_WIDTH,
 };
 struct ctrl_param pwm_freq = {
-	.label = "PWM FREQ",
-	.value = 0.3,
-	.min = 0.001,
-	.max = 10.0,
+    .label = "PWM FREQ",
+    .value = 0.3,
+    .min = 0.001,
+    .max = 10.0,
 };
 
 struct ctrl_param bend_target = {
-	.label = "BEND",
-	.value = 1.0,
-	.min = -2.0,
-	.max = 2.0,
+    .label = "BEND",
+    .value = 1.0,
+    .min = -2.0,
+    .max = 2.0,
 };
-float bend= 1.0;
+float bend = 1.0;
 
 struct ctrl_param dist_level = {
-	.label = "DIST THRESHOLD",
-	.value = 1.0,
-	.min = 0.01,
-	.max = 1.0,
+    .label = "DIST THRESHOLD",
+    .value = 1.0,
+    .min = 0.01,
+    .max = 1.0,
 };
 struct ctrl_param flip_level = {
-	.label = "FLIP THRESHOLD",
-	.value = 1.1,
-	.min = 0.01,
-	.max = 1.1,
+    .label = "FLIP THRESHOLD",
+    .value = 1.1,
+    .min = 0.01,
+    .max = 1.1,
 };
 
 struct ctrl_param A = {
-	.label = "A",
-	.value = 5,
-	.min = 0.1,
-	.max = 100.0,
+    .label = "A",
+    .value = 5,
+    .min = 0.1,
+    .max = 100.0,
 };
 struct ctrl_param D = {
-	.label = "D",
-	.value = 25,
-	.min = 0.1,
-	.max = 500,
+    .label = "D",
+    .value = 25,
+    .min = 0.1,
+    .max = 500,
 };
 struct ctrl_param S = {
-	.label = "S",
-	.value = 0.5,
-	.min = 0,
-	.max = 1,
+    .label = "S",
+    .value = 0.5,
+    .min = 0,
+    .max = 1,
 };
 struct ctrl_param R = {
-	.label = "R",
-	.value = 500,
-	.min = 0,
-	.max = 1000,
+    .label = "R",
+    .value = 500,
+    .min = 0,
+    .max = 1000,
 };
 
 struct ctrl_param env_to_cutoff = {
-	.label = "ENV TO CUTOFF",
-	.value = 500,
-	.min = 0,
-	.max = 5000,
+    .label = "ENV TO CUTOFF",
+    .value = 500,
+    .min = 0,
+    .max = 5000,
 };
 struct ctrl_param env_to_amp = {
-	.label = "ENV TO AMP",
-	.value = 1.0,
-	.min = 0,
-	.max = 1.0,
+    .label = "ENV TO AMP",
+    .value = 1.0,
+    .min = 0,
+    .max = 1.0,
 };
 
 struct ctrl_param delay_ms = {
-	.label = "DELAY [MS]",
-	.value = 600,
-	.min = 0,
-	.max = 1000,
+    .label = "DELAY [MS]",
+    .value = 600,
+    .min = 0,
+    .max = 1000,
 };
 
 struct ctrl_param delay_fb = {
-	.label = "DELAY FEEDBACK",
-	.value = 0.4,
-	.min = 0.0,
-	.max = 0.9,
+    .label = "DELAY FEEDBACK",
+    .value = 0.4,
+    .min = 0.0,
+    .max = 0.9,
 };
 
 struct ctrl_param_group tone_ctrls = {
-    .params = {&octave, &bend_target, &env_to_amp},
+    .params = {&osc_type, &octave, &osc_cnt, &osc_detune_step, &env_to_amp},
 };
 
 struct ctrl_param_group envelope_ctrls = {
@@ -205,11 +236,11 @@ struct ctrl_param_group pwm_ctrls = {
     .params = {&base_width, &pwm_freq},
 };
 
-
-struct ctrl_param_group *param_groups[MAX_GROUPS] = {&tone_ctrls, &envelope_ctrls, &filter_ctrls, &pwm_ctrls, &dist_ctrls, &delay_ctrls};
+struct ctrl_param_group *param_groups[MAX_GROUPS] = {&tone_ctrls, &envelope_ctrls, &filter_ctrls,
+                                                     &pwm_ctrls,  &dist_ctrls,     &delay_ctrls};
 
 struct square_controller *sqc_arr[5] = {};
-struct slide_controller *slc_arr[MAX_PARAMS_PER_GROUP*MAX_GROUPS] = {};
+struct slide_controller *slc_arr[MAX_PARAMS_PER_GROUP * MAX_GROUPS] = {};
 
 float pianokey_per_scancode[SDL_SCANCODE_COUNT] = {
     [SDL_SCANCODE_Z] = 12, [SDL_SCANCODE_S] = 13, [SDL_SCANCODE_X] = 14, [SDL_SCANCODE_D] = 15, [SDL_SCANCODE_C] = 16,
@@ -306,13 +337,13 @@ static void key_release(int key)
     }
 }
 
-static float render_pulse(const long long current_frame, struct voice *voice, const SDL_AudioSpec *spec, float freq,
+static float render_pulse(const long long current_frame, float *period_pos, const SDL_AudioSpec *spec, float freq,
                           float width, bool *new_period)
 {
-    voice->period_position += freq / spec->freq;
-    if (voice->period_position > 1.0)
+    *period_pos += freq / spec->freq;
+    if (*period_pos > 1.0)
     {
-        voice->period_position -= 1.0;
+        *period_pos = 0.0;
         *new_period = true;
     }
     else
@@ -320,10 +351,27 @@ static float render_pulse(const long long current_frame, struct voice *voice, co
         *new_period = false;
     }
 
-    if (voice->period_position > width)
+    if (*period_pos > width)
         return -1.0;
     else
         return 1.0;
+}
+
+static float render_saw(const long long current_frame, float *period_pos, const SDL_AudioSpec *spec, float freq,
+                        float width, bool *new_period)
+{
+    *period_pos += freq / spec->freq;
+    if (*period_pos > 1.0)
+    {
+        *period_pos = 0.0;
+        *new_period = true;
+    }
+    else
+    {
+        *new_period = false;
+    }
+
+    return -1 + 2 * *period_pos;
 }
 
 static float render_sample(const long long current_frame, const SDL_AudioSpec *spec, bool *new_period)
@@ -338,15 +386,50 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
         struct voice *voice = &voices[i];
         if (voice->key != 0)
         {
-            float raw_sample =
-                0.3 / NBR_VOICES *
-                render_pulse(current_frame, voice, spec, bend * key_to_freq[voice->key], width, new_period);
+            float raw_sample = 0.0;
+            float up_offset_per_osc =
+                (key_to_freq[voice->key + 1] - key_to_freq[voice->key]) / 100 * osc_detune_step.value;
+            float down_offset_per_osc =
+                (key_to_freq[voice->key] - key_to_freq[voice->key - 1]) / 100 * osc_detune_step.value;
+            int osc_detune = -((int)osc_cnt.value) / 2;
+            for (int osc = 0; osc < (int)osc_cnt.value; osc++)
+            {
+
+                float freq = key_to_freq[voice->key];
+                if (osc_detune < 0)
+                    freq += osc_detune * down_offset_per_osc;
+                else
+                    freq += osc_detune * down_offset_per_osc;
+
+                freq = bend * freq;
+
+                if (osc_type.value == OSC_TYPE_PULSE)
+                {
+                    raw_sample +=
+                        0.7 / NBR_VOICES *
+                        render_pulse(current_frame, &voice->period_position[osc], spec, freq, width, new_period);
+                }
+                else if (osc_type.value == OSC_TYPE_SAW)
+                {
+                    raw_sample +=
+                        0.7 / NBR_VOICES *
+                        render_saw(current_frame, &voice->period_position[osc], spec, freq, width, new_period);
+                }
+                else
+                {
+                    fprintf(stderr, "Invalid oscillator type\n");
+                }
+
+                osc_detune += 1;
+            }
             // envelope
             raw_sample = raw_sample * (1.0 - env_to_amp.value) +
-                         raw_sample * env_to_amp.value * envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame);
+                         raw_sample * env_to_amp.value *
+                             envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame);
             // filter
             int cut_freq = max(150, cutoff.value - env_to_cutoff.value / 2 +
-                                        env_to_cutoff.value * envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame) +
+                                        env_to_cutoff.value * envelope_get(&voice->env, A.value, D.value, S.value,
+                                                                           R.value, current_frame) +
                                         110 * cosine_render_sample(current_frame, spec, 0.1));
             low_pass_filter_configure(&voice->filter, cutoff.value, resonance.value, spec->freq);
             sample += low_pass_filter_get_output(&voice->filter, raw_sample);
@@ -590,21 +673,21 @@ int main(int argc, char **argv)
         const int width = 100;
         const int height = 10;
         int label_height = text_get_height();
-	int tot_height = height + label_height;
+        int tot_height = height + label_height;
         int x = margin;
-	int y = margin;
+        int y = margin;
         while ((pg = param_groups[i++]))
         {
             j = 0;
             while ((p = pg->params[j++]))
             {
-                x = margin + y/(HEIGHT-tot_height) * (WIDTH - 2* margin - width);
+                x = margin + y / (HEIGHT - tot_height) * (WIDTH - 2 * margin - width);
                 slc_arr[k++] = slide_controller_create(
-                    x, y%(HEIGHT-tot_height), width, height, (struct linear_control){&p->value, p->min, p->max, p->quantized_to_int},
-                    p->label);
+                    x, y % (HEIGHT - tot_height), width, height,
+                    (struct linear_control){&p->value, p->min, p->max, p->quantized_to_int}, p->label);
                 y += (margin + height + label_height);
             }
-	    y += 3*margin;
+            y += 3 * margin;
         }
     }
 
