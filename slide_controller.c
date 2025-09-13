@@ -28,24 +28,45 @@ static void set_marker(struct slide_controller *sc, int x, int y)
 static void linear_control_set(struct linear_control *lc, float setting)
 {
     float range = lc->max - lc->min;
-    *lc->target = lc->min + (range * setting);
+    float value = lc->min + (range * setting);
+    if (lc->quantized_to_int)
+    {
+        value = round(value);
+    }
+    *lc->target = value;
+}
+
+static void set_pos_from_value(struct slide_controller *sc)
+{
+    int mx, my;
+    struct linear_control *control = &sc->control;
+    if (sc->width > sc->height) // x slider
+    {
+        mx = round(((*control->target - control->min) / (control->max - control->min)) * sc->width + sc->x);
+        my = sc->y + sc->height / 2;
+    }
+    else
+    {
+        mx = sc->x + sc->width / 2;
+        my = round(((*control->target - control->min) / (control->max - control->min)) * sc->height + sc->y);
+    }
+    set_marker(sc, mx, my);
 }
 
 void slide_controller_move(struct slide_controller *sc, int x, int y)
 {
     // fix offset with text here.
-    if (sc->clicked  )
+    if (sc->clicked)
     {
-        if (sc->width > sc->height&& x >= sc->x  && x <= (sc->x + sc->width))
+        if (sc->width > sc->height && x >= sc->x && x <= (sc->x + sc->width))
         {
             linear_control_set(&sc->control, 1.0 * (x - sc->x) / sc->width);
-            set_marker(sc, x, sc->y + sc->height / 2);
         }
         else if (sc->height > sc->width && y >= sc->y && y <= (sc->y + sc->height))
         {
             linear_control_set(&sc->control, 1.0 * (y - sc->y) / sc->height);
-            set_marker(sc, sc->x + sc->width / 2, y);
         }
+        set_pos_from_value(sc);
     }
 }
 
@@ -56,13 +77,12 @@ void slide_controller_click(struct slide_controller *sc, int x, int y)
         if (sc->width > sc->height)
         {
             linear_control_set(&sc->control, 1.0 * (x - sc->x) / sc->width);
-            set_marker(sc, x, sc->y + sc->height / 2);
         }
         else
         {
             linear_control_set(&sc->control, 1.0 * (y - sc->y) / sc->height);
-            set_marker(sc, sc->x + sc->width / 2, y);
         }
+        set_pos_from_value(sc);
         sc->clicked = true;
     }
 }
@@ -103,17 +123,7 @@ struct slide_controller *slide_controller_create(int x, int y, int width, int he
     sc->label = label;
 
     // calculate initial marker position
-    if (width > height) // x slider
-    {
-        mx = round(((*control.target - control.min) / (control.max - control.min)) * width + x);
-        my = y + height / 2;
-    }
-    else
-    {
-        mx = x + width / 2;
-        my = round(((*control.target - control.min) / (control.max - control.min)) * height + y);
-    }
-    set_marker(sc, mx, my);
+    set_pos_from_value(sc);
 
     sc->border_points[0].x = x;
     sc->border_points[0].y = y;

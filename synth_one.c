@@ -38,6 +38,9 @@
 
 #define MAX_DELAY_MS (750)
 
+#define MAX_PARAMS_PER_GROUP (8)
+#define MAX_GROUPS (8)
+
 static bool synth_abort = false;
 
 static void pr_sdl_err()
@@ -58,32 +61,155 @@ struct voice
 
 struct voice voices[NBR_VOICES] = {};
 
-int octave = 0;
+struct ctrl_param
+{
+    const char *label;
+    float value;
+    float min;
+    float max;
+    bool quantized_to_int;
+};
 
-float cutoff = 1000;
-float resonance = 0.9;
+struct ctrl_param_group
+{
+    struct ctrl_param *params[MAX_PARAMS_PER_GROUP];
+};
 
-float base_width = MAX_WIDTH;
-float pwm_freq = 0.3;
+struct ctrl_param octave = {
+    .label = "OCTAVE",
+    .value = 0,
+    .min = 0,
+    .max = 5,
+    .quantized_to_int = true,
+};
 
-float bend = 1.0;
-float bend_target = 1.0;
+struct ctrl_param cutoff = {
+    .label = "CUTOFF",
+    .value = 1000,
+    .min = 50,
+    .max = 17000,
+};
+struct ctrl_param resonance = {
+    .label = "RESONANCE",
+    .value = 0.9,
+    .min = 0.0,
+    .max = 0.98,
+};
+struct ctrl_param base_width = {
+    .label = "PULSE WIDTH",
+    .value = MAX_WIDTH,
+    .min = 0.05,
+    .max = MAX_WIDTH,
+};
+struct ctrl_param pwm_freq = {
+	.label = "PWM FREQ",
+	.value = 0.3,
+	.min = 0.001,
+	.max = 10.0,
+};
 
-float dist_level = 1.0;
-float flip_level = 1.1;
+struct ctrl_param bend_target = {
+	.label = "BEND",
+	.value = 1.0,
+	.min = -2.0,
+	.max = 2.0,
+};
+float bend= 1.0;
 
-float A = 5;   // ms
-float D = 25;  // ms
-float S = 0.5; // amplitude factor
-float R = 250; // ms
+struct ctrl_param dist_level = {
+	.label = "DIST THRESHOLD",
+	.value = 1.0,
+	.min = 0.01,
+	.max = 1.0,
+};
+struct ctrl_param flip_level = {
+	.label = "FLIP THRESHOLD",
+	.value = 1.1,
+	.min = 0.01,
+	.max = 1.1,
+};
 
-float env_to_cutoff = 1000;
-float env_to_amp = 1.0;
+struct ctrl_param A = {
+	.label = "A",
+	.value = 5,
+	.min = 0.1,
+	.max = 100.0,
+};
+struct ctrl_param D = {
+	.label = "D",
+	.value = 25,
+	.min = 0.1,
+	.max = 500,
+};
+struct ctrl_param S = {
+	.label = "S",
+	.value = 0.5,
+	.min = 0,
+	.max = 1,
+};
+struct ctrl_param R = {
+	.label = "R",
+	.value = 500,
+	.min = 0,
+	.max = 1000,
+};
 
-float delay_ms = 600.0;
+struct ctrl_param env_to_cutoff = {
+	.label = "ENV TO CUTOFF",
+	.value = 500,
+	.min = 0,
+	.max = 5000,
+};
+struct ctrl_param env_to_amp = {
+	.label = "ENV TO AMP",
+	.value = 1.0,
+	.min = 0,
+	.max = 1.0,
+};
+
+struct ctrl_param delay_ms = {
+	.label = "DELAY [MS]",
+	.value = 600,
+	.min = 0,
+	.max = 1000,
+};
+
+struct ctrl_param delay_fb = {
+	.label = "DELAY FEEDBACK",
+	.value = 0.4,
+	.min = 0.0,
+	.max = 0.9,
+};
+
+struct ctrl_param_group tone_ctrls = {
+    .params = {&octave, &bend_target, &env_to_amp},
+};
+
+struct ctrl_param_group envelope_ctrls = {
+    .params = {&A, &D, &S, &R},
+};
+
+struct ctrl_param_group filter_ctrls = {
+    .params = {&cutoff, &resonance, &env_to_cutoff},
+};
+
+struct ctrl_param_group dist_ctrls = {
+    .params = {&dist_level, &flip_level},
+};
+
+struct ctrl_param_group delay_ctrls = {
+    .params = {&delay_fb, &delay_ms},
+};
+
+struct ctrl_param_group pwm_ctrls = {
+    .params = {&base_width, &pwm_freq},
+};
+
+
+struct ctrl_param_group *param_groups[MAX_GROUPS] = {&tone_ctrls, &envelope_ctrls, &filter_ctrls, &pwm_ctrls, &dist_ctrls, &delay_ctrls};
 
 struct square_controller *sqc_arr[5] = {};
-struct slide_controller *slc_arr[6] = {};
+struct slide_controller *slc_arr[MAX_PARAMS_PER_GROUP*MAX_GROUPS] = {};
 
 float pianokey_per_scancode[SDL_SCANCODE_COUNT] = {
     [SDL_SCANCODE_Z] = 12, [SDL_SCANCODE_S] = 13, [SDL_SCANCODE_X] = 14, [SDL_SCANCODE_D] = 15, [SDL_SCANCODE_C] = 16,
@@ -203,7 +329,7 @@ static float render_pulse(const long long current_frame, struct voice *voice, co
 static float render_sample(const long long current_frame, const SDL_AudioSpec *spec, bool *new_period)
 {
     float sample = 0.0;
-    float width = base_width + 0.1 * cosine_render_sample(current_frame, spec, pwm_freq);
+    float width = base_width.value + 0.1 * cosine_render_sample(current_frame, spec, pwm_freq.value);
 
     width = max(MIN_WIDTH, width);
     width = min(MAX_WIDTH, width);
@@ -216,23 +342,23 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
                 0.3 / NBR_VOICES *
                 render_pulse(current_frame, voice, spec, bend * key_to_freq[voice->key], width, new_period);
             // envelope
-            raw_sample = raw_sample * (1.0 - env_to_amp) +
-                         raw_sample * env_to_amp * envelope_get(&voice->env, A, D, S, R, current_frame);
+            raw_sample = raw_sample * (1.0 - env_to_amp.value) +
+                         raw_sample * env_to_amp.value * envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame);
             // filter
-            int cut_freq = max(150, cutoff - env_to_cutoff / 2 +
-                                        env_to_cutoff * envelope_get(&voice->env, A, D, S, R, current_frame) +
+            int cut_freq = max(150, cutoff.value - env_to_cutoff.value / 2 +
+                                        env_to_cutoff.value * envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame) +
                                         110 * cosine_render_sample(current_frame, spec, 0.1));
-            low_pass_filter_configure(&voice->filter, cutoff, resonance, spec->freq);
+            low_pass_filter_configure(&voice->filter, cutoff.value, resonance.value, spec->freq);
             sample += low_pass_filter_get_output(&voice->filter, raw_sample);
         }
     }
 
     // distort
 
-    sample = distort(sample, dist_level, flip_level);
+    sample = distort(sample, dist_level.value, flip_level.value);
 
     // echo
-    sample += 0.2 * delay_get_sample(delay_ms, spec);
+    sample += delay_fb.value * delay_get_sample(delay_ms.value, spec);
     delay_put_sample(sample);
 
     // chorus
@@ -270,7 +396,7 @@ static bool render_sample_frames(long long *current_frame, int frames, char *buf
         if (new_period)
         {
 #define BEND_STEP (0.001)
-            float bend_diff = bend_target - bend;
+            float bend_diff = bend_target.value - bend;
             if (bend_diff > BEND_STEP)
             {
                 bend += BEND_STEP;
@@ -281,7 +407,7 @@ static bool render_sample_frames(long long *current_frame, int frames, char *buf
             }
             else
             {
-                bend = bend_target;
+                bend = bend_target.value;
             }
         }
 
@@ -456,29 +582,35 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    sqc_arr[0] = square_controller_create(10, 10, 100, 100, (struct linear_control){&resonance, 0.9, 0.01},
-                                          (struct linear_control){&cutoff, input_spec.freq / 2.5, 50}, "RES", "CUTOFF");
-    sqc_arr[1] = square_controller_create(230, 10, 100, 100, (struct linear_control){&base_width, MIN_WIDTH, MAX_WIDTH},
-                                          (struct linear_control){&pwm_freq, 0.1, 10.0}, "PWDTH", "MOD FRQ");
-    sqc_arr[2] = square_controller_create(450, 10, 100, 100, (struct linear_control){&dist_level, 0.1, 0.999},
-                                          (struct linear_control){&flip_level, 0.1, 1.1}, "DIST", "CLIP");
-    sqc_arr[3] = square_controller_create(10, HEIGHT - 130, 100, 100, (struct linear_control){&env_to_amp, 0.0, 1.0},
-                                          (struct linear_control){&env_to_cutoff, 0.0, 4000.0}, "TO AMP", "ENV TO CUT");
+    {
+        int i, j, k = 0;
+        struct ctrl_param_group *pg;
+        struct ctrl_param *p;
+        const int margin = 10;
+        const int width = 100;
+        const int height = 10;
+        int label_height = text_get_height();
+	int tot_height = height + label_height;
+        int x = margin;
+	int y = margin;
+        while ((pg = param_groups[i++]))
+        {
+            j = 0;
+            while ((p = pg->params[j++]))
+            {
+                x = margin + y/(HEIGHT-tot_height) * (WIDTH - 2* margin - width);
+                slc_arr[k++] = slide_controller_create(
+                    x, y%(HEIGHT-tot_height), width, height, (struct linear_control){&p->value, p->min, p->max, p->quantized_to_int},
+                    p->label);
+                y += (margin + height + label_height);
+            }
+	    y += 3*margin;
+        }
+    }
 
-    slc_arr[0] = slide_controller_create(130, HEIGHT - 130, 10, 100,
-                                         (struct linear_control){&delay_ms, 0.5, MAX_DELAY_MS}, "DELAY MS");
-
-    slc_arr[1] =
-        slide_controller_create(160, HEIGHT - 130, 10, 100, (struct linear_control){&A, 0.0, 2000}, "Attack [ms]");
-    slc_arr[2] =
-        slide_controller_create(190, HEIGHT - 130, 10, 100, (struct linear_control){&D, 0.0, 2000}, "Decay [ms]");
-    slc_arr[3] =
-        slide_controller_create(220, HEIGHT - 130, 10, 100, (struct linear_control){&S, 0.0, 1.0}, "Sustain level");
-    slc_arr[4] =
-        slide_controller_create(250, HEIGHT - 130, 10, 100, (struct linear_control){&R, 0.0, 2000}, "Attack [ms]");
     text_init(renderer);
 
-    if (res = setup_video_timer(&video_timer))
+    if ((res = setup_video_timer(&video_timer)))
         return res;
 
     // MIDI STUFF
@@ -496,7 +628,7 @@ int main(int argc, char **argv)
         voices[i].released = 0;
 
         envelope_init(&voices[i].env, &input_spec);
-        low_pass_filter_init(&voices[i].filter, res, cutoff, input_spec.freq);
+        low_pass_filter_init(&voices[i].filter, res, cutoff.value, input_spec.freq);
     }
 
     devId = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
@@ -562,7 +694,7 @@ int main(int argc, char **argv)
                 int new_key = pianokey_per_scancode[event.key.scancode];
                 if (new_key != 0)
                 {
-                    new_key += 12 * octave;
+                    new_key += 12 * octave.value;
                     key_press(new_key);
                 }
             }
@@ -571,7 +703,7 @@ int main(int argc, char **argv)
                 int new_key = pianokey_per_scancode[event.key.scancode];
                 if (new_key != 0)
                 {
-                    new_key += 12 * octave;
+                    new_key += 12 * octave.value;
                     key_release(new_key);
                 }
             }

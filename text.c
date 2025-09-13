@@ -5,6 +5,15 @@
 static SDL_Surface *text_surface;
 static SDL_Texture *text_texture;
 
+static const int text_height = 16;
+static const int text_width = 8;
+
+int text_get_height()
+{
+
+	return text_height;
+}
+
 void text_init(SDL_Renderer *renderer)
 {
     text_surface = SDL_LoadBMP("ascii.bmp");
@@ -29,32 +38,32 @@ void text_draw(SDL_Renderer *renderer, const char *text, int x, int y, bool vert
 {
     int i;
     char c;
-    SDL_FRect dstrect = {.x = x, .y = y, .w = 8, .h = 16};
-    SDL_FRect srcrect = {.x = x, .y = y, .w = 8, .h = 16};
+    SDL_FRect dstrect = {.x = x, .y = y, .w = text_width, .h = text_height};
+    SDL_FRect srcrect = {.x = x, .y = y, .w = text_width, .h = text_height};
 
     if (vertical)
     {
-    dstrect.w = 8;
-    dstrect.h = 16;
+    dstrect.w = text_width;
+    dstrect.h = text_height;
         for (i = 0; (c = text[i]); i++)
         {
-            // Source image is a representation of ascii chars from 32 and up, 32 per "line". each is 16*16 pixels
-            srcrect.x = 8 * (c % 32);
-            srcrect.y = 16 * (c / 32 - 1);
+            // Source image is a representation of ascii chars from 32 and up, 32 per "line".
+            srcrect.x = text_width * (c % 32);
+            srcrect.y = text_height * (c / 32 - 1);
             if (!SDL_RenderTextureRotated(renderer, text_texture, &srcrect, &dstrect, -90,&(SDL_FPoint){}, SDL_FLIP_NONE))
                 printf("Failed to render text!\n");
-            dstrect.y -= 8;
+            dstrect.y -= text_width;
         }
     }
     else
     {
         for (i = 0; (c = text[i]); i++)
         {
-            srcrect.x = 8 * (c % 32);
-            srcrect.y = 16 * (c / 32 - 1);
+            srcrect.x = text_width * (c % 32);
+            srcrect.y = text_height * (c / 32 - 1);
             if (!SDL_RenderTexture(renderer, text_texture, &srcrect, &dstrect))
                 printf("Failed to render text!\n");
-            dstrect.x += 8;
+            dstrect.x += text_width;
         }
     }
 }
