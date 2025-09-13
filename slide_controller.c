@@ -34,11 +34,18 @@ static void linear_control_set(struct linear_control *lc, float setting)
 void slide_controller_move(struct slide_controller *sc, int x, int y)
 {
     // fix offset with text here.
-    if (sc->clicked && x >= sc->x && x <= (sc->x + sc->width) && y >= sc->y && y <= (sc->y + sc->height))
+    if (sc->clicked  )
     {
-        linear_control_set(&sc->control, 1.0 * (x - sc->x) / sc->width);
-        linear_control_set(&sc->control, 1.0 * (y - sc->y) / sc->height);
-        set_marker(sc, x, y);
+        if (sc->width > sc->height&& x >= sc->x  && x <= (sc->x + sc->width))
+        {
+            linear_control_set(&sc->control, 1.0 * (x - sc->x) / sc->width);
+            set_marker(sc, x, sc->y + sc->height / 2);
+        }
+        else if (sc->height > sc->width && y >= sc->y && y <= (sc->y + sc->height))
+        {
+            linear_control_set(&sc->control, 1.0 * (y - sc->y) / sc->height);
+            set_marker(sc, sc->x + sc->width / 2, y);
+        }
     }
 }
 
