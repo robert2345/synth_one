@@ -214,6 +214,20 @@ struct ctrl_param delay_fb = {
     .max = 0.9,
 };
 
+struct ctrl_param chorus_amount = {
+    .label = "CHORUS AMOUNT",
+    .value = 0.0,
+    .min = 0.0,
+    .max = 1.0,
+};
+
+struct ctrl_param chorus_freq = {
+    .label = "CHORUS FREQ",
+    .value = 1.0,
+    .min = 0.1,
+    .max = 5.0,
+};
+
 struct ctrl_param_group tone_ctrls = {
     .params = {&osc_type, &octave, &osc_cnt, &osc_detune_step, &env_to_amp},
 };
@@ -238,8 +252,12 @@ struct ctrl_param_group pwm_ctrls = {
     .params = {&base_width, &pwm_freq},
 };
 
+struct ctrl_param_group chorus_ctrls = {
+    .params = {&chorus_amount, &chorus_freq},
+};
+
 struct ctrl_param_group *param_groups[MAX_GROUPS] = {&tone_ctrls, &envelope_ctrls, &filter_ctrls,
-                                                     &pwm_ctrls,  &dist_ctrls,     &delay_ctrls};
+                                                     &pwm_ctrls,  &dist_ctrls,     &delay_ctrls, &chorus_ctrls};
 
 struct square_controller *sqc_arr[5] = {};
 struct slide_controller *slc_arr[MAX_PARAMS_PER_GROUP * MAX_GROUPS] = {};
@@ -521,8 +539,8 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
     delay_put_sample(sample);
 
     // chorus
-    float chorus_delay_ms = 3.0 + 1.0 * cosine_render_sample(current_frame, spec, 3);
-    sample += 0.2 * delay_get_sample(chorus_delay_ms, spec);
+    float chorus_delay_ms = 3.0 + 1.0 * cosine_render_sample(current_frame, spec, chorus_freq.value);
+    sample += chorus_amount.value * delay_get_sample(chorus_delay_ms, spec);
 
     sample = distort(sample, 0.999, 100.0);
 
