@@ -42,6 +42,8 @@
 #define MAX_PARAMS_PER_GROUP (8)
 #define MAX_GROUPS (8)
 
+#define LINE_LEN (100)
+
 enum osc_type
 {
     OSC_TYPE_PULSE,
@@ -278,6 +280,80 @@ const SDL_AudioSpec input_spec = {.channels = 1, .format = SDL_AUDIO_S16, .freq 
 static size_t calc_frame_size(const SDL_AudioSpec *spec)
 {
     return spec->channels * SDL_AUDIO_BYTESIZE(spec->format);
+}
+
+static void save_settings()
+{
+    char filename[] = "saved_settings.txt";
+    FILE *f = fopen(filename, "w");
+    if (f)
+    {
+        int i = 0;
+        struct ctrl_param_group *pg;
+        while ((pg = param_groups[i++]))
+        {
+            struct ctrl_param *p;
+            int j = 0;
+            while ((p = pg->params[j++]))
+            {
+                fprintf(f, "%s = %f\n", p->label, p->value);
+            }
+        }
+        fclose(f);
+    }
+}
+
+static void parse_and_apply_setting(char *string)
+{
+    int i = 0;
+    struct ctrl_param_group *pg;
+    while ((pg = param_groups[i++]))
+    {
+        struct ctrl_param *p;
+        int j = 0;
+        while ((p = pg->params[j++]))
+        {
+            int len = strlen(p->label);
+            char tmp = string[len];
+	    if (string[len] != ' ')
+		    continue;
+            string[len] = '\0';
+            if (0 == strcmp(string, p->label))
+            {
+		    p->value = atof(&string[len+3]);
+		    string[len] = tmp;
+		    printf("%s\nRead %s with value %f\n", string, p->label, p->value);
+		    break;
+            }
+            string[len] = tmp;
+        }
+    }
+}
+
+static void load_settings()
+{
+    char c;
+    int i = 0;
+    char line[LINE_LEN + 1];
+    char filename[] = "saved_settings.txt";
+    FILE *f = fopen(filename, "r");
+    if (!f)
+    {
+        printf("Failed to open \"%s\"\n", filename);
+        return;
+    }
+    while (fread(&c, 1, 1, f) && c != EOF)
+    {
+        if (c == '\n')
+        {
+            line[i] = '\0';
+            parse_and_apply_setting(line);
+            // printf("%s\n", line);
+            i = 0;
+            continue;
+        }
+        line[i++] = c;
+    }
 }
 
 static void key_press(int key)
@@ -646,6 +722,9 @@ int main(int argc, char **argv)
 
     signal(SIGINT, sig_handler);
 
+    // SETTINGS
+    load_settings();
+
     // VIDEO STUFF
     window = SDL_CreateWindow("Synth One",      // window title
                               WIDTH,            // width, in pixels
@@ -715,11 +794,10 @@ int main(int argc, char **argv)
     }
 
     int count;
-    SDL_AudioDeviceID * ids = SDL_GetAudioPlaybackDevices(&count);
+    SDL_AudioDeviceID *ids = SDL_GetAudioPlaybackDevices(&count);
     for (int i = 0; i < count; i++)
     {
-	    printf("%d: %s\n", i, SDL_GetAudioDeviceName(ids[i]));
-
+        printf("%d: %s\n", i, SDL_GetAudioDeviceName(ids[i]));
     }
 
     devId = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
@@ -860,6 +938,8 @@ int main(int argc, char **argv)
         }
         usleep(750);
     }
+
+    save_settings();
 
     midi_stop(midi_in);
 
