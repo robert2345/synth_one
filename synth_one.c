@@ -21,8 +21,8 @@
 #include "square_controller.h"
 #include "text.h"
 
-#define WIDTH (640)
-#define HEIGHT (480)
+#define WIDTH (1024)
+#define HEIGHT (768)
 #define X_STEP (5)
 #define WAVEFORM_LEN (WIDTH / X_STEP)
 
@@ -32,8 +32,8 @@
 #define min(x, y) ((x) < (y) ? x : y)
 #define max(x, y) ((x) < (y) ? y : x)
 
-#define MAX_WIDTH (0.5)
-#define MIN_WIDTH (0.1)
+#define MAX_WIDTH (0.99)
+#define MIN_WIDTH (0.01)
 
 #define NBR_KEYS (88)
 
@@ -131,7 +131,7 @@ struct ctrl_param resonance = {
 struct ctrl_param base_width = {
     .label = "PULSE WIDTH",
     .value = MAX_WIDTH,
-    .min = 0.05,
+    .min = MIN_WIDTH,
     .max = MAX_WIDTH,
 };
 struct ctrl_param pwm_freq = {
@@ -139,6 +139,12 @@ struct ctrl_param pwm_freq = {
     .value = 0.3,
     .min = 0.001,
     .max = 10.0,
+};
+struct ctrl_param pwm_amount = {
+    .label = "PWM AMOUNT",
+    .value = 0.1,
+    .min = 0.0,
+    .max = 0.5,
 };
 
 struct ctrl_param bend_target = {
@@ -249,26 +255,26 @@ struct ctrl_param_group delay_ctrls = {
 };
 
 struct ctrl_param_group pwm_ctrls = {
-    .params = {&base_width, &pwm_freq},
+    .params = {&base_width, &pwm_freq, &pwm_amount},
 };
 
 struct ctrl_param_group chorus_ctrls = {
     .params = {&chorus_amount, &chorus_freq},
 };
 
-struct ctrl_param_group *param_groups[MAX_GROUPS] = {&tone_ctrls, &envelope_ctrls, &filter_ctrls,
-                                                     &pwm_ctrls,  &dist_ctrls,     &delay_ctrls, &chorus_ctrls};
+struct ctrl_param_group *param_groups[MAX_GROUPS] = {&tone_ctrls, &envelope_ctrls, &filter_ctrls, &pwm_ctrls,
+                                                     &dist_ctrls, &delay_ctrls,    &chorus_ctrls};
 
 struct square_controller *sqc_arr[5] = {};
 struct slide_controller *slc_arr[MAX_PARAMS_PER_GROUP * MAX_GROUPS] = {};
 
 float pianokey_per_scancode[SDL_SCANCODE_COUNT] = {
-    [SDL_SCANCODE_Z] = 1, [SDL_SCANCODE_S] = 2, [SDL_SCANCODE_X] = 3, [SDL_SCANCODE_D] = 4, [SDL_SCANCODE_C] = 5,
-    [SDL_SCANCODE_V] = 6, [SDL_SCANCODE_G] = 7, [SDL_SCANCODE_B] = 8, [SDL_SCANCODE_H] = 9, [SDL_SCANCODE_N] = 10,
+    [SDL_SCANCODE_Z] = 1,  [SDL_SCANCODE_S] = 2,  [SDL_SCANCODE_X] = 3,  [SDL_SCANCODE_D] = 4,  [SDL_SCANCODE_C] = 5,
+    [SDL_SCANCODE_V] = 6,  [SDL_SCANCODE_G] = 7,  [SDL_SCANCODE_B] = 8,  [SDL_SCANCODE_H] = 9,  [SDL_SCANCODE_N] = 10,
     [SDL_SCANCODE_J] = 11, [SDL_SCANCODE_M] = 12, [SDL_SCANCODE_Q] = 13, [SDL_SCANCODE_2] = 14, [SDL_SCANCODE_W] = 15,
     [SDL_SCANCODE_3] = 16, [SDL_SCANCODE_E] = 17, [SDL_SCANCODE_R] = 18, [SDL_SCANCODE_5] = 19, [SDL_SCANCODE_T] = 20,
     [SDL_SCANCODE_6] = 21, [SDL_SCANCODE_Y] = 22, [SDL_SCANCODE_7] = 23, [SDL_SCANCODE_U] = 24, [SDL_SCANCODE_I] = 25,
-    [SDL_SCANCODE_9] = 26, [SDL_SCANCODE_O] = 27, [SDL_SCANCODE_0] = 28,[SDL_SCANCODE_P] = 29,
+    [SDL_SCANCODE_9] = 26, [SDL_SCANCODE_O] = 27, [SDL_SCANCODE_0] = 28, [SDL_SCANCODE_P] = 29,
 
 };
 
@@ -333,15 +339,15 @@ static void parse_and_apply_setting(char *string)
         {
             int len = strlen(p->label);
             char tmp = string[len];
-	    if (string[len] != ' ')
-		    continue;
+            if (string[len] != ' ')
+                continue;
             string[len] = '\0';
             if (0 == strcmp(string, p->label))
             {
-		    p->value = atof(&string[len+3]);
-		    string[len] = tmp;
-		    printf("%s\nRead %s with value %f\n", string, p->label, p->value);
-		    break;
+                p->value = atof(&string[len + 3]);
+                string[len] = tmp;
+                printf("%s\nRead %s with value %f\n", string, p->label, p->value);
+                break;
             }
             string[len] = tmp;
         }
@@ -471,7 +477,7 @@ static float render_saw(const long long current_frame, float *period_pos, const 
 static float render_sample(const long long current_frame, const SDL_AudioSpec *spec, bool *new_period)
 {
     float sample = 0.0;
-    float width = base_width.value + 0.1 * cosine_render_sample(current_frame, spec, pwm_freq.value);
+    float width = base_width.value + pwm_amount.value * cosine_render_sample(current_frame, spec, pwm_freq.value);
 
     width = max(MIN_WIDTH, width);
     width = min(MAX_WIDTH, width);
@@ -521,10 +527,10 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
                          raw_sample * env_to_amp.value *
                              envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame);
             // filter
-            int cut_freq = max(50, cutoff.value  +
-                                        env_to_cutoff.value * envelope_get(&voice->env, A.value, D.value, S.value,
-                                                                           R.value, current_frame) +
-                                        110 * cosine_render_sample(current_frame, spec, 0.1));
+            int cut_freq = max(50, cutoff.value +
+                                       env_to_cutoff.value * envelope_get(&voice->env, A.value, D.value, S.value,
+                                                                          R.value, current_frame) +
+                                       110 * cosine_render_sample(current_frame, spec, 0.1));
             low_pass_filter_configure(&voice->filter, cut_freq, resonance.value, spec->freq);
             sample += low_pass_filter_get_output(&voice->filter, raw_sample);
         }
@@ -746,7 +752,7 @@ int main(int argc, char **argv)
     // VIDEO STUFF
     window = SDL_CreateWindow("Synth One",      // window title
                               WIDTH,            // width, in pixels
-                              480,              // height, in pixels
+                              HEIGHT,           // height, in pixels
                               SDL_WINDOW_OPENGL // flags - see below
     );
     if (!window)
