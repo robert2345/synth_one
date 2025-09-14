@@ -189,9 +189,9 @@ struct ctrl_param R = {
 
 struct ctrl_param env_to_cutoff = {
     .label = "ENV TO CUTOFF",
-    .value = 500,
+    .value = 5000,
     .min = 0,
-    .max = 5000,
+    .max = 10000,
 };
 struct ctrl_param env_to_amp = {
     .label = "ENV TO AMP",
@@ -503,11 +503,11 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
                          raw_sample * env_to_amp.value *
                              envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame);
             // filter
-            int cut_freq = max(150, cutoff.value - env_to_cutoff.value / 2 +
+            int cut_freq = max(50, cutoff.value  +
                                         env_to_cutoff.value * envelope_get(&voice->env, A.value, D.value, S.value,
                                                                            R.value, current_frame) +
                                         110 * cosine_render_sample(current_frame, spec, 0.1));
-            low_pass_filter_configure(&voice->filter, cutoff.value, resonance.value, spec->freq);
+            low_pass_filter_configure(&voice->filter, cut_freq, resonance.value, spec->freq);
             sample += low_pass_filter_get_output(&voice->filter, raw_sample);
         }
     }
