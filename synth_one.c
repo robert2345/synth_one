@@ -714,6 +714,14 @@ int main(int argc, char **argv)
         low_pass_filter_init(&voices[i].filter, res, cutoff.value, input_spec.freq);
     }
 
+    int count;
+    SDL_AudioDeviceID * ids = SDL_GetAudioPlaybackDevices(&count);
+    for (int i = 0; i < count; i++)
+    {
+	    printf("%d: %s\n", i, SDL_GetAudioDeviceName(ids[i]));
+
+    }
+
     devId = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
     if (!devId)
     {
