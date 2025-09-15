@@ -127,19 +127,19 @@ struct ctrl_param osc_detune_step = {
 
 struct ctrl_param cutoff = {
     .label = "CUTOFF",
-    .value = 1000,
+    .value = 17000,
     .min = 50,
     .max = 17000,
 };
 struct ctrl_param resonance = {
     .label = "RESONANCE",
-    .value = 0.9,
+    .value = 0.0,
     .min = 0.0,
     .max = 0.98,
 };
 struct ctrl_param base_width = {
     .label = "PULSE WIDTH",
-    .value = MAX_WIDTH,
+    .value = 0.5,
     .min = MIN_WIDTH,
     .max = MAX_WIDTH,
 };
@@ -151,7 +151,7 @@ struct ctrl_param pwm_freq = {
 };
 struct ctrl_param pwm_amount = {
     .label = "PWM AMOUNT",
-    .value = 0.1,
+    .value = 0.0,
     .min = 0.0,
     .max = 0.5,
 };
@@ -179,9 +179,9 @@ struct ctrl_param flip_level = {
 
 struct ctrl_param A = {
     .label = "A",
-    .value = 5,
+    .value = 0.1,
     .min = 0.1,
-    .max = 100.0,
+    .max = 500.0,
 };
 struct ctrl_param D = {
     .label = "D",
@@ -191,20 +191,20 @@ struct ctrl_param D = {
 };
 struct ctrl_param S = {
     .label = "S",
-    .value = 0.5,
+    .value = 1,
     .min = 0,
     .max = 1,
 };
 struct ctrl_param R = {
     .label = "R",
-    .value = 500,
+    .value = 0,
     .min = 0,
     .max = 1000,
 };
 
 struct ctrl_param env_to_cutoff = {
     .label = "ENV TO CUTOFF",
-    .value = 5000,
+    .value = 0,
     .min = 0,
     .max = 10000,
 };
@@ -224,7 +224,7 @@ struct ctrl_param delay_ms = {
 
 struct ctrl_param delay_fb = {
     .label = "DELAY FEEDBACK",
-    .value = 0.4,
+    .value = 0.0,
     .min = 0.0,
     .max = 0.9,
 };
