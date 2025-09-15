@@ -42,7 +42,7 @@ float envelope_get(struct env_state *state, float A, float D, float S, float R, 
         exit(-1);
     }
 
-    if (state->start_frame > state->release_frame)
+    if (state->start_frame >= state->release_frame)
     {
         int attack_frames = ms_to_frames(state->sample_rate, A);
         long long decay_start = state->start_frame + attack_frames;

@@ -403,7 +403,7 @@ static void key_press(int key)
 
         if (voice->key == key)
         {
-            if (voice->released < current_frame)
+            if (voice->released <= current_frame)
             {
                 oldest_voice = voice;
                 break;
