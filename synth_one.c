@@ -44,6 +44,8 @@
 
 #define LINE_LEN (100)
 
+#define DEFAULT_SETTINGS_FILE_NAME "saved_settings.txt"
+
 enum osc_type
 {
     OSC_TYPE_PULSE,
@@ -315,7 +317,7 @@ static size_t calc_frame_size(const SDL_AudioSpec *spec)
 
 static void save_settings()
 {
-    char filename[] = "saved_settings.txt";
+    char filename[] = DEFAULT_SETTINGS_FILE_NAME;
     FILE *f = fopen(filename, "w");
     if (f)
     {
@@ -361,12 +363,11 @@ static void parse_and_apply_setting(char *string)
     }
 }
 
-static void load_settings()
+static void load_settings(char *filename)
 {
     char c;
     int i = 0;
     char line[LINE_LEN + 1];
-    char filename[] = "saved_settings.txt";
     FILE *f = fopen(filename, "r");
     if (!f)
     {
@@ -754,7 +755,10 @@ int main(int argc, char **argv)
     signal(SIGINT, sig_handler);
 
     // SETTINGS
-    load_settings();
+    if (argc == 2)
+        load_settings(argv[1]);
+    else
+        load_settings(DEFAULT_SETTINGS_FILE_NAME);
 
     // VIDEO STUFF
     window = SDL_CreateWindow("Synth One",      // window title
