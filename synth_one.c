@@ -85,6 +85,13 @@ struct ctrl_param_group
     struct ctrl_param *params[MAX_PARAMS_PER_GROUP];
 };
 
+struct ctrl_param amplitude = {
+    .label = "LINEAR GAIN",
+    .value = 0.7,
+    .min = 0.1,
+    .max = 3,
+};
+
 struct ctrl_param octave = {
     .label = "OCTAVE",
     .value = 0,
@@ -235,7 +242,7 @@ struct ctrl_param chorus_freq = {
 };
 
 struct ctrl_param_group tone_ctrls = {
-    .params = {&osc_type, &octave, &osc_cnt, &osc_detune_step, &env_to_amp},
+    .params = {&amplitude, &osc_type, &octave, &osc_cnt, &osc_detune_step, &env_to_amp},
 };
 
 struct ctrl_param_group envelope_ctrls = {
@@ -506,13 +513,13 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
                 if (osc_type.value == OSC_TYPE_PULSE)
                 {
                     raw_sample +=
-                        0.7 / NBR_VOICES *
+                        amplitude.value / NBR_VOICES *
                         render_pulse(current_frame, &voice->period_position[osc], spec, freq, width, new_period);
                 }
                 else if (osc_type.value == OSC_TYPE_SAW)
                 {
                     raw_sample +=
-                        0.7 / NBR_VOICES *
+                        amplitude.value / NBR_VOICES *
                         render_saw(current_frame, &voice->period_position[osc], spec, freq, width, new_period);
                 }
                 else
