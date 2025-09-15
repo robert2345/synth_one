@@ -535,10 +535,10 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
                          raw_sample * env_to_amp.value *
                              envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame);
             // filter
-            int cut_freq = max(50, cutoff.value +
+            int cut_freq = min(17000, max(50, cutoff.value +
                                        env_to_cutoff.value * envelope_get(&voice->env, A.value, D.value, S.value,
                                                                           R.value, current_frame) +
-                                       110 * cosine_render_sample(current_frame, spec, 0.1));
+                                       110 * cosine_render_sample(current_frame, spec, 0.1)));
             low_pass_filter_configure(&voice->filter, cut_freq, resonance.value, spec->freq);
             sample += low_pass_filter_get_output(&voice->filter, raw_sample);
         }
