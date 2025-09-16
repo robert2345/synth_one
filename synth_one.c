@@ -446,17 +446,12 @@ static void key_release(int key)
 }
 
 static float render_pulse(const long long current_frame, float *period_pos, const SDL_AudioSpec *spec, float freq,
-                          float width, bool *new_period)
+                          float width)
 {
     *period_pos += freq / spec->freq;
     if (*period_pos > 1.0)
     {
         *period_pos = 0.0;
-        *new_period = true;
-    }
-    else
-    {
-        *new_period = false;
     }
 
     if (*period_pos > width)
@@ -466,23 +461,18 @@ static float render_pulse(const long long current_frame, float *period_pos, cons
 }
 
 static float render_saw(const long long current_frame, float *period_pos, const SDL_AudioSpec *spec, float freq,
-                        float width, bool *new_period)
+                        float width)
 {
     *period_pos += freq / spec->freq;
     if (*period_pos > 1.0)
     {
         *period_pos = 0.0;
-        *new_period = true;
-    }
-    else
-    {
-        *new_period = false;
     }
 
-    return -1 + 2 * *period_pos;
+    return -1.0 + 2.0 * *period_pos;
 }
 
-static float render_sample(const long long current_frame, const SDL_AudioSpec *spec, bool *new_period)
+static float render_sample(const long long current_frame, const SDL_AudioSpec *spec)
 {
     float sample = 0.0;
     float width = base_width.value + pwm_amount.value * cosine_render_sample(current_frame, spec, pwm_freq.value);
@@ -515,13 +505,13 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
                 {
                     raw_sample +=
                         amplitude.value / NBR_VOICES *
-                        render_pulse(current_frame, &voice->period_position[osc], spec, freq, width, new_period);
+                        render_pulse(current_frame, &voice->period_position[osc], spec, freq, width);
                 }
                 else if (osc_type.value == OSC_TYPE_SAW)
                 {
                     raw_sample +=
                         amplitude.value / NBR_VOICES *
-                        render_saw(current_frame, &voice->period_position[osc], spec, freq, width, new_period);
+                        render_saw(current_frame, &voice->period_position[osc], spec, freq, width);
                 }
                 else
                 {
@@ -536,16 +526,15 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
                              envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame);
             // filter
             int cut_freq = min(17000, max(50, cutoff.value +
-                                       env_to_cutoff.value * envelope_get(&voice->env, A.value, D.value, S.value,
-                                                                          R.value, current_frame) +
-                                       110 * cosine_render_sample(current_frame, spec, 0.1)));
+                                                  env_to_cutoff.value * envelope_get(&voice->env, A.value, D.value,
+                                                                                     S.value, R.value, current_frame) +
+                                                  110 * cosine_render_sample(current_frame, spec, 0.1)));
             low_pass_filter_configure(&voice->filter, cut_freq, resonance.value, spec->freq);
             sample += low_pass_filter_get_output(&voice->filter, raw_sample);
         }
     }
 
     // distort
-
     sample = distort(sample, dist_level.value, flip_level.value);
 
     // echo
@@ -570,17 +559,26 @@ static void write_sample(float sample, char **buf, const SDL_AudioSpec *spec)
 
 static bool render_sample_frames(long long *current_frame, int frames, char *buf, const SDL_AudioSpec *spec)
 {
-    int s, c = 0;
+    int s, c, i = 0;
     float sample;
+    struct voice *lowest_voice = NULL;
+    { // Find the key for which we generate the visualization.
+        for (i = 0; i < NBR_VOICES; i++)
+        {
+            if (voices[i].pressed < voices[i].released && (!lowest_voice || lowest_voice->key > voices[i].key))
+                lowest_voice = &voices[i];
+        }
+    }
+
     for (s = 0; s < frames; s++)
     {
-        bool new_period;
+        bool new_period = !lowest_voice || lowest_voice->period_position[0] == 0.0f;
 
         // what is going on with channels here? only one buffer so it seems a bit
         // broken if multiple channels.
         for (c = 0; c < spec->channels; c++)
         {
-            sample = render_sample(*current_frame, spec, &new_period);
+            sample = render_sample(*current_frame, spec);
             write_sample(sample, &buf, spec);
         }
 
@@ -604,7 +602,8 @@ static bool render_sample_frames(long long *current_frame, int frames, char *buf
 
         // write to visualisation buffer
         {
-            int samples_per_period = max(WAVEFORM_LEN, spec->freq / (bend * key_to_freq[voices[0].key]));
+            int lowest_key = lowest_voice ? lowest_voice->key : 1;
+            int samples_per_period = max(WAVEFORM_LEN, spec->freq / (bend * key_to_freq[lowest_key]));
             bool on_grid = (*current_frame % (2 * samples_per_period / WAVEFORM_LEN) == 0) &&
                            waveform_written < WAVEFORM_LEN && waveform_written != 0;
             if ((new_period && (waveform_written == 0)) || on_grid)
