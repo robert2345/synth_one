@@ -137,6 +137,12 @@ struct ctrl_param resonance = {
     .min = 0.0,
     .max = 0.98,
 };
+struct ctrl_param key_to_cutoff = {
+    .label = "KEY TO CUTOFF",
+    .value = 0.0,
+    .min = 0.0,
+    .max = 1.0,
+};
 struct ctrl_param base_width = {
     .label = "PULSE WIDTH",
     .value = 0.5,
@@ -252,7 +258,7 @@ struct ctrl_param_group envelope_ctrls = {
 };
 
 struct ctrl_param_group filter_ctrls = {
-    .params = {&cutoff, &resonance, &env_to_cutoff},
+    .params = {&cutoff, &resonance, &env_to_cutoff, &key_to_cutoff},
 };
 
 struct ctrl_param_group dist_ctrls = {
@@ -503,15 +509,13 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
 
                 if (osc_type.value == OSC_TYPE_PULSE)
                 {
-                    raw_sample +=
-                        amplitude.value / NBR_VOICES *
-                        render_pulse(current_frame, &voice->period_position[osc], spec, freq, width);
+                    raw_sample += amplitude.value / NBR_VOICES *
+                                  render_pulse(current_frame, &voice->period_position[osc], spec, freq, width);
                 }
                 else if (osc_type.value == OSC_TYPE_SAW)
                 {
-                    raw_sample +=
-                        amplitude.value / NBR_VOICES *
-                        render_saw(current_frame, &voice->period_position[osc], spec, freq, width);
+                    raw_sample += amplitude.value / NBR_VOICES *
+                                  render_saw(current_frame, &voice->period_position[osc], spec, freq, width);
                 }
                 else
                 {
@@ -525,7 +529,7 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
                          raw_sample * env_to_amp.value *
                              envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame);
             // filter
-            int cut_freq = min(17000, max(50, cutoff.value +
+            int cut_freq = min(17000, max(50, key_to_cutoff.value * key_to_freq[voice->key] + cutoff.value +
                                                   env_to_cutoff.value * envelope_get(&voice->env, A.value, D.value,
                                                                                      S.value, R.value, current_frame) +
                                                   110 * cosine_render_sample(current_frame, spec, 0.1)));
