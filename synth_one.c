@@ -17,6 +17,7 @@
 #include "envelope.h"
 #include "low_pass_filter.h"
 #include "midi.h"
+#include "sequencer.h"
 #include "slide_controller.h"
 #include "square_controller.h"
 #include "text.h"
@@ -466,6 +467,14 @@ static void key_release(int key)
     }
 }
 
+static void note_change(int key_on, int key_off)
+{
+    pthread_mutex_lock(&mutex);
+    key_release(key_off);
+    key_press(key_on);
+    pthread_mutex_unlock(&mutex);
+};
+
 static float render_pulse(const long long current_frame, float *period_pos, const SDL_AudioSpec *spec, float freq,
                           float width)
 {
@@ -699,7 +708,7 @@ static void draw_waveform(SDL_Renderer *renderer)
             slide_controller_draw(renderer, slc);
         }
 
-        text_draw(renderer, "THIS IS A SYNTHESIZER!", WIDTH / 2 - 12 * 16, HEIGHT / 2 - 8, false);
+        sequencer_draw(renderer);
 
         SDL_RenderPresent(renderer);
         waveform_written = 0;
@@ -826,6 +835,8 @@ int main(int argc, char **argv)
 
     text_init(renderer);
 
+    sequencer_init(note_change);
+
     if ((res = setup_video_timer(&video_timer)))
         return res;
 
@@ -914,11 +925,16 @@ int main(int argc, char **argv)
         {
             if (event.type == SDL_EVENT_KEY_DOWN)
             {
-                int new_key = pianokey_per_scancode[event.key.scancode];
-                if (new_key != 0)
+                if (event.key.scancode == SDL_SCANCODE_SPACE)
+                    sequencer_toggle();
+                else
                 {
-                    new_key += 12 * octave.value;
-                    key_press(new_key);
+                    int new_key = pianokey_per_scancode[event.key.scancode];
+                    if (new_key != 0)
+                    {
+                        new_key += 12 * octave.value;
+                        key_press(new_key);
+                    }
                 }
             }
             else if (event.type == SDL_EVENT_KEY_UP)

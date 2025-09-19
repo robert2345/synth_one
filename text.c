@@ -14,6 +14,12 @@ int text_get_height()
 	return text_height;
 }
 
+int text_get_width()
+{
+
+	return text_width;
+}
+
 void text_init(SDL_Renderer *renderer)
 {
     text_surface = SDL_LoadBMP("ascii.bmp");
