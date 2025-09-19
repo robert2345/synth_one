@@ -925,11 +925,17 @@ int main(int argc, char **argv)
         {
             if (event.type == SDL_EVENT_KEY_DOWN)
             {
-                if (event.key.scancode == SDL_SCANCODE_SPACE)
-                    sequencer_toggle();
-                else
+		    int new_key;
+                switch (event.key.scancode)
                 {
-                    int new_key = pianokey_per_scancode[event.key.scancode];
+                case SDL_SCANCODE_SPACE:
+                    sequencer_toggle_run();
+                    break;
+                case SDL_SCANCODE_ESCAPE:
+                    sequencer_toggle_edit();
+                    break;
+                default:
+                    new_key = pianokey_per_scancode[event.key.scancode];
                     if (new_key != 0)
                     {
                         new_key += 12 * octave.value;

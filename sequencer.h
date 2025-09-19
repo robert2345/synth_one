@@ -1,4 +1,5 @@
 #pragma once
 void sequencer_init();
 void sequencer_draw(SDL_Renderer *renderer);
-void sequencer_toggle();
+void sequencer_toggle_run();
+void sequencer_toggle_edit();

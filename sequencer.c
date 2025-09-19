@@ -16,12 +16,14 @@ struct step
 };
 
 static struct step steps[NBR_STEPS];
+static SDL_FPoint big_square[5];
 
 int *(*note_change_cb)(int on_key, int off_key);
 
 static int step_idx = 0;
 static const int step_time_ms = 400;
 static timer_t sequencer_timer;
+static bool edit = false;
 static bool run = false;
 static bool running = false;
 
@@ -38,6 +40,11 @@ void sequencer_draw(SDL_Renderer *renderer)
         else
             SDL_SetRenderDrawColor(renderer, 0, 50, 150, 255);
         SDL_RenderLines(renderer, step->points, 5);
+    }
+    if (edit)
+    {
+        SDL_SetRenderDrawColor(renderer, 250, 50, 0, 255);
+        SDL_RenderLines(renderer, big_square, 5);
     }
 }
 
@@ -90,6 +97,17 @@ void sequencer_init(int *(*callback)(int on_key, int off_key))
 
     note_change_cb = callback;
 
+    big_square[0].x = x - MARGIN;
+    big_square[0].y = y - MARGIN;
+    big_square[1].x = x + NBR_STEPS * (width + spacing);
+    big_square[1].y = y - MARGIN;
+    big_square[2].x = x + NBR_STEPS * (width + spacing);
+    big_square[2].y = y + height + MARGIN;
+    big_square[3].x = x - MARGIN;
+    big_square[3].y = y + height + MARGIN;
+    big_square[4].x = x - MARGIN;
+    big_square[4].y = y - MARGIN;
+
     for (i = 0; i < NBR_STEPS; i++)
     {
         steps[i].key = 1 + ((i + 1) % 3 == 0) * 5 + ((i + 2) % 3 == 0) * 12;
@@ -110,7 +128,12 @@ void sequencer_init(int *(*callback)(int on_key, int off_key))
     setup_timer();
 }
 
-void sequencer_toggle()
+void sequencer_toggle_run()
 {
     run = !run;
+}
+
+void sequencer_toggle_edit()
+{
+    edit = !edit;
 }
