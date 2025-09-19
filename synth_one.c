@@ -940,8 +940,8 @@ int main(int argc, char **argv)
                     {
                         new_key += 12 * octave.value;
                         key_press(new_key);
-                        sequencer_input(new_key);
                     }
+                    sequencer_input(new_key);
                 }
             }
             else if (event.type == SDL_EVENT_KEY_UP)
