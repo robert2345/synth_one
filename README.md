@@ -1,15 +1,19 @@
-Plays sounds with computer keyboard as note input.
+# Synth One
+  
+Plays sounds.  
+Input from keyboard or MIDI.  
+Tiny stepsequencer.  
+Many options to tweak the sound.  
 
-Currently consists of a PWM pulse oscillator source which feeds a low pass filter. Adjustable clip level. Low frequency sine wave oscillators modulate the pulse width of the oscillator and the cutoff frequency of the filter. ADSR envelope controls amplitude and cutoff. There is a delay and chorus.
+<img width="1026" height="807" alt="image" src="https://github.com/user-attachments/assets/de82168e-ef04-4966-be77-360cd4052a61" />
 
-<img width="642" height="519" alt="image" src="https://github.com/user-attachments/assets/69df59ea-e27c-4679-a4b3-b2c4e53e890e" />
 
-SDL is cloned as a subdir
-libalsa should be installed for midi
-For some reason:
-sudo apt-get install libjack-dev
+SDL is cloned as a subdir.  
+libalsa should be installed for midi  
+For some reason:  
+sudo apt-get install libjack-dev  
 
-- Clone repo
-- cmake .
-- make
-- ./synth_one
+- Clone repo  
+- cmake .  
+- make  
+- ./synth_one  
