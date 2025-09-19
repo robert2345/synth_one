@@ -11,7 +11,6 @@
 struct step
 {
     int key;
-    char label[3];
     SDL_FPoint points[5];
 };
 
@@ -21,11 +20,14 @@ static SDL_FPoint big_square[5];
 int *(*note_change_cb)(int on_key, int off_key);
 
 static int step_idx = 0;
-static const int step_time_ms = 400;
 static timer_t sequencer_timer;
 static bool edit = false;
 static bool run = false;
 static bool running = false;
+static float bpm = 120.0;
+static int steps_per_beat = 4;
+
+#define LABEL_LEN (3)
 
 void sequencer_draw(SDL_Renderer *renderer)
 {
@@ -33,8 +35,10 @@ void sequencer_draw(SDL_Renderer *renderer)
     for (i = 0; i < NBR_STEPS; i++)
     {
         struct step *step = &steps[i];
+        char label[LABEL_LEN];
+        snprintf(label, LABEL_LEN, "%u", steps[i].key);
 
-        text_draw(renderer, step->label, step->points[4].x + MARGIN, step->points[4].y + MARGIN, false);
+        text_draw(renderer, label, step->points[4].x + MARGIN, step->points[4].y + MARGIN, false);
         if (step_idx == i)
             SDL_SetRenderDrawColor(renderer, 250, 50, 0, 255);
         else
@@ -71,7 +75,8 @@ static int setup_timer()
 {
     struct sigevent sevnt = {.sigev_notify = SIGEV_THREAD, .sigev_notify_function = step};
 
-    struct itimerspec new_value = {.it_interval = {.tv_nsec = step_time_ms * 1000000ull}};
+    float steps_per_second = bpm /60  * steps_per_beat;
+    struct itimerspec new_value = {.it_interval = {.tv_nsec = 1000000000 / steps_per_second}};
     new_value.it_value = new_value.it_interval;
 
     int ret = timer_create(CLOCK_MONOTONIC, &sevnt, &sequencer_timer);
@@ -111,7 +116,6 @@ void sequencer_init(int *(*callback)(int on_key, int off_key))
     for (i = 0; i < NBR_STEPS; i++)
     {
         steps[i].key = 1 + ((i + 1) % 3 == 0) * 5 + ((i + 2) % 3 == 0) * 12;
-        snprintf(steps[i].label, 3, "%u", steps[i].key);
         steps[i].points[0].x = x;
         steps[i].points[0].y = y;
         steps[i].points[1].x = x + width;
@@ -136,4 +140,10 @@ void sequencer_toggle_run()
 void sequencer_toggle_edit()
 {
     edit = !edit;
+}
+
+void sequencer_input(int key)
+{
+    steps[step_idx].key = key;
+    step_idx = (step_idx + 1) % NBR_STEPS;
 }

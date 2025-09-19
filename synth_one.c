@@ -925,7 +925,7 @@ int main(int argc, char **argv)
         {
             if (event.type == SDL_EVENT_KEY_DOWN)
             {
-		    int new_key;
+                int new_key;
                 switch (event.key.scancode)
                 {
                 case SDL_SCANCODE_SPACE:
@@ -940,6 +940,7 @@ int main(int argc, char **argv)
                     {
                         new_key += 12 * octave.value;
                         key_press(new_key);
+                        sequencer_input(new_key);
                     }
                 }
             }
