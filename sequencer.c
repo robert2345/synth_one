@@ -75,7 +75,7 @@ static int setup_timer()
 {
     struct sigevent sevnt = {.sigev_notify = SIGEV_THREAD, .sigev_notify_function = step};
 
-    float steps_per_second = bpm /60  * steps_per_beat;
+    float steps_per_second = bpm / 60 * steps_per_beat;
     struct itimerspec new_value = {.it_interval = {.tv_nsec = 1000000000 / steps_per_second}};
     new_value.it_value = new_value.it_interval;
 
@@ -144,6 +144,9 @@ void sequencer_toggle_edit()
 
 void sequencer_input(int key)
 {
-    steps[step_idx].key = key;
-    step_idx = (step_idx + 1) % NBR_STEPS;
+    if (edit)
+    {
+        steps[step_idx].key = key;
+        step_idx = (step_idx + 1) % NBR_STEPS;
+    }
 }
