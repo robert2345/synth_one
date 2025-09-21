@@ -12,7 +12,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # This assumes the SDL source is available in ./SDL
 add_subdirectory(SDL EXCLUDE_FROM_ALL)
 
-add_executable(${APP_NAME} synth_one.c low_pass_filter.c square_controller.c square_controller.c text.c delay.c distortion.c envelope.c slide_controller.c midi.c sequencer.c)
+add_executable(${APP_NAME} synth_one.c low_pass_filter.c square_controller.c square_controller.c text.c delay.c distortion.c envelope.c slide_controller.c midi.c sequencer.c ball.c)
 
 # Link to the SDL3 library.
 target_link_libraries(${APP_NAME} PRIVATE SDL3::SDL3)

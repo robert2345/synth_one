@@ -11,6 +11,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "ball.h"
 #include "cosine.h"
 #include "delay.h"
 #include "distortion.h"
@@ -24,7 +25,7 @@
 
 #define WIDTH (1024)
 #define HEIGHT (768)
-#define X_STEP (5)
+#define X_STEP (1)
 #define WAVEFORM_LEN (WIDTH / X_STEP)
 
 #define NBR_VOICES (8)
@@ -699,6 +700,7 @@ static void draw_waveform(SDL_Renderer *renderer)
         SDL_RenderClear(renderer);
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         SDL_RenderLines(renderer, points, WIDTH / X_STEP);
+        ball_draw(renderer, points, WIDTH, X_STEP, current_frame);
         for (i = 0; (sqc = sqc_arr[i]); i++)
         {
             square_controller_draw(renderer, sqc);
