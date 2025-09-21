@@ -48,12 +48,17 @@
 
 #define DEFAULT_SETTINGS_FILE_NAME "saved_settings.txt"
 
+#define NBR_BALLS (20)
+
 enum osc_type
 {
     OSC_TYPE_PULSE,
     OSC_TYPE_SAW,
     OSC_TYPE_COUNT,
 };
+
+static struct ball_state *balls[NBR_BALLS];
+static int ball_idx = 0;
 
 static bool synth_abort = false;
 
@@ -333,6 +338,16 @@ int buffer_frames;
 size_t frame_size;
 const SDL_AudioSpec input_spec = {.channels = 1, .format = SDL_AUDIO_S16, .freq = 44100};
 
+static void create_ball(int x, int y)
+{
+
+    pthread_mutex_lock(&mutex);
+    ball_idx = (ball_idx + 1) % NBR_BALLS;
+    ball_destroy(&balls[ball_idx]);
+    balls[ball_idx] = ball_create(x, y, 0, 0, current_frame);
+    pthread_mutex_unlock(&mutex);
+}
+
 static size_t calc_frame_size(const SDL_AudioSpec *spec)
 {
     return spec->channels * SDL_AUDIO_BYTESIZE(spec->format);
@@ -403,7 +418,6 @@ static void load_settings(char *filename)
         {
             line[i] = '\0';
             parse_and_apply_setting(line);
-            // printf("%s\n", line);
             i = 0;
             continue;
         }
@@ -418,6 +432,7 @@ static void key_press(int key)
     // notes higher that 0x53 are really bad so no need to even try
     if (key >= 0x35)
         return;
+    pthread_mutex_lock(&mutex);
     // find oldest empty spot and if key is already in the array
     for (int i = 0; i < NBR_VOICES; i++)
     {
@@ -439,6 +454,7 @@ static void key_press(int key)
                 oldest_voice = voice;
                 break;
             }
+            pthread_mutex_unlock(&mutex);
             return;
         }
     }
@@ -448,10 +464,16 @@ static void key_press(int key)
     oldest_voice->pressed = current_frame;
 
     oldest_voice->key = key;
+    pthread_mutex_unlock(&mutex);
+    for (int i = 0; i < NBR_BALLS; i++)
+    {
+        create_ball(round(1.0 * i * WIDTH / NBR_BALLS), HEIGHT / 2);
+    }
 }
 
 static void key_release(int key)
 {
+    pthread_mutex_lock(&mutex);
     for (int i = 0; i < NBR_VOICES; i++)
     {
         struct voice *voice = &voices[i];
@@ -462,18 +484,18 @@ static void key_release(int key)
                 envelope_release(&voice->env, current_frame);
                 voice->released = current_frame;
                 voice->pressed = INT64_MAX;
+                pthread_mutex_unlock(&mutex);
                 return;
             }
         }
     }
+    pthread_mutex_unlock(&mutex);
 }
 
 static void note_change(int key_on, int key_off)
 {
-    pthread_mutex_lock(&mutex);
     key_release(key_off);
     key_press(key_on);
-    pthread_mutex_unlock(&mutex);
 };
 
 static float render_pulse(const long long current_frame, float *period_pos, const SDL_AudioSpec *spec, float freq,
@@ -700,7 +722,13 @@ static void draw_waveform(SDL_Renderer *renderer)
         SDL_RenderClear(renderer);
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         SDL_RenderLines(renderer, points, WIDTH / X_STEP);
-        ball_draw(renderer, points, WIDTH, X_STEP, current_frame);
+
+        for (int i = 0; i < NBR_BALLS; i++)
+        {
+            if (balls[i])
+                ball_draw(renderer, balls[i], points, current_frame);
+        }
+
         for (i = 0; (sqc = sqc_arr[i]); i++)
         {
             square_controller_draw(renderer, sqc);
@@ -752,7 +780,7 @@ static int setup_video_timer(timer_t *t)
     for (i = 0; i < WAVEFORM_LEN; i++)
         points[i].x = i * X_STEP;
 
-    struct itimerspec new_value = {.it_interval = {.tv_nsec = 1000000000ull / 8}};
+    struct itimerspec new_value = {.it_interval = {.tv_nsec = 100000000ull / 8}};
     new_value.it_value = new_value.it_interval;
 
     int ret = timer_create(CLOCK_MONOTONIC, &sevnt, t);
@@ -838,6 +866,8 @@ int main(int argc, char **argv)
     text_init(renderer);
 
     sequencer_init(note_change);
+
+    ball_init(WIDTH, HEIGHT, X_STEP);
 
     if ((res = setup_video_timer(&video_timer)))
         return res;
@@ -972,6 +1002,8 @@ int main(int argc, char **argv)
                 {
                     slide_controller_click(slc, event.button.x, event.button.y);
                 }
+
+                create_ball(event.button.x, event.button.y);
             }
             else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP)
             {
@@ -1027,6 +1059,9 @@ int main(int argc, char **argv)
 
     SDL_DestroyAudioStream(stream);
     SDL_CloseAudioDevice(devId);
+
+    for (int i = 0; i < NBR_BALLS; i++)
+        ball_destroy(&balls[i]);
 
     free(buf);
 
