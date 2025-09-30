@@ -16,6 +16,7 @@
 #include "delay.h"
 #include "distortion.h"
 #include "envelope.h"
+#include "fm.h"
 #include "low_pass_filter.h"
 #include "midi.h"
 #include "sequencer.h"
@@ -42,7 +43,7 @@
 #define MAX_DELAY_MS (750)
 
 #define MAX_PARAMS_PER_GROUP (8)
-#define MAX_GROUPS (8)
+#define MAX_GROUPS (9)
 
 #define LINE_LEN (100)
 
@@ -54,6 +55,7 @@ enum osc_type
 {
     OSC_TYPE_PULSE,
     OSC_TYPE_SAW,
+    OSC_TYPE_FM,
     OSC_TYPE_COUNT,
 };
 
@@ -94,6 +96,20 @@ struct ctrl_param_group
     struct ctrl_param *params[MAX_PARAMS_PER_GROUP];
 };
 
+struct ctrl_param op_amp = {
+    .label = "OP1 AMP",
+    .value = 0.01,
+    .min = 0.001,
+    .max = 0.1,
+};
+
+struct ctrl_param op_freq = {
+    .label = "OP1 FREQ",
+    .value = 0.01,
+    .min = 0.001,
+    .max = 2.0,
+};
+
 struct ctrl_param amplitude = {
     .label = "LINEAR GAIN",
     .value = 0.7,
@@ -110,10 +126,10 @@ struct ctrl_param octave = {
 };
 
 struct ctrl_param osc_type = {
-    .label = "SAW/PULSE",
+    .label = "PULSE/SAW/FM",
     .value = OSC_TYPE_PULSE,
-    .min = OSC_TYPE_SAW,
-    .max = OSC_TYPE_PULSE,
+    .min = 0,
+    .max = OSC_TYPE_COUNT - 1,
     .quantized_to_int = true,
 };
 
@@ -299,8 +315,14 @@ struct ctrl_param_group chorus_ctrls = {
     .params = {&chorus_amount, &chorus_freq},
 };
 
+struct ctrl_param_group fm_ctrls = {
+    .params = {&op_amp, &op_freq},
+};
+
+static struct fm_operator fm_ops[NBR_FM_OPS] = {{.amp = &op_amp.value, .freq = &op_freq.value}};
+
 struct ctrl_param_group *param_groups[MAX_GROUPS] = {&tone_ctrls, &envelope_ctrls, &filter_ctrls, &pwm_ctrls,
-                                                     &dist_ctrls, &delay_ctrls,    &chorus_ctrls};
+                                                     &dist_ctrls, &delay_ctrls,    &chorus_ctrls, &fm_ctrls};
 
 struct square_controller *sqc_arr[5] = {};
 struct slide_controller *slc_arr[MAX_PARAMS_PER_GROUP * MAX_GROUPS] = {};
@@ -543,33 +565,42 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
             float down_offset_per_osc =
                 (key_to_freq[voice->key] - key_to_freq[voice->key - 1]) / 100 * osc_detune_step.value;
             int osc_detune = -((int)osc_cnt.value) / 2;
-            for (int osc = 0; osc < (int)osc_cnt.value; osc++)
+            if (osc_type.value == OSC_TYPE_FM)
             {
-
+                // NO detuning with FM
                 float freq = key_to_freq[voice->key];
-                if (osc_detune < 0)
-                    freq += osc_detune * down_offset_per_osc;
-                else
-                    freq += osc_detune * down_offset_per_osc;
-
-                freq = bend * freq;
-
-                if (osc_type.value == OSC_TYPE_PULSE)
+                raw_sample = amplitude.value * render_fm(current_frame, &voice->period_position[0], spec, freq, fm_ops);
+            }
+            else
+            {
+                for (int osc = 0; osc < (int)osc_cnt.value; osc++)
                 {
-                    raw_sample += amplitude.value / NBR_VOICES *
-                                  render_pulse(current_frame, &voice->period_position[osc], spec, freq, width);
-                }
-                else if (osc_type.value == OSC_TYPE_SAW)
-                {
-                    raw_sample += amplitude.value / NBR_VOICES *
-                                  render_saw(current_frame, &voice->period_position[osc], spec, freq, width);
-                }
-                else
-                {
-                    fprintf(stderr, "Invalid oscillator type\n");
-                }
 
-                osc_detune += 1;
+                    float freq = key_to_freq[voice->key];
+                    if (osc_detune < 0)
+                        freq += osc_detune * down_offset_per_osc;
+                    else
+                        freq += osc_detune * down_offset_per_osc;
+
+                    freq = bend * freq;
+
+                    if (osc_type.value == OSC_TYPE_PULSE)
+                    {
+                        raw_sample += amplitude.value / NBR_VOICES *
+                                      render_pulse(current_frame, &voice->period_position[osc], spec, freq, width);
+                    }
+                    else if (osc_type.value == OSC_TYPE_SAW)
+                    {
+                        raw_sample += amplitude.value / NBR_VOICES *
+                                      render_saw(current_frame, &voice->period_position[osc], spec, freq, width);
+                    }
+                    else
+                    {
+                        fprintf(stderr, "Invalid oscillator type\n");
+                    }
+
+                    osc_detune += 1;
+                }
             }
             // envelope
             raw_sample = raw_sample * (1.0 - env_to_amp.value) +
