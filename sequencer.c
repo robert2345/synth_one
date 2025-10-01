@@ -17,7 +17,7 @@ struct step
 static struct step steps[NBR_STEPS];
 static SDL_FPoint big_square[5];
 
-int *(*note_change_cb)(int on_key, int off_key);
+void (*note_change_cb)(int on_key, int off_key);
 
 static int step_idx = 0;
 static timer_t sequencer_timer;
@@ -91,11 +91,11 @@ static int setup_timer()
     return 0;
 }
 
-void sequencer_init(int *(*callback)(int on_key, int off_key))
+void sequencer_init(void (*callback)(int on_key, int off_key))
 {
     int i = 0;
-    int x = 350;
-    int y = 350;
+    int x = 650;
+    int y = 450;
     const int width = MARGIN * 2 + 2 * text_get_width();
     const int height = MARGIN * 2 + text_get_height();
     const int spacing = 2;

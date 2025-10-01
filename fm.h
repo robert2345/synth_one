@@ -1,5 +1,6 @@
 #pragma once
 #include <SDL3/SDL_audio.h>
+#include <SDL3/SDL_render.h>
 
 struct fm_operator
 {
@@ -7,6 +8,8 @@ struct fm_operator
     float *freq;
 };
 
-#define NBR_FM_OPS (1)
-float render_fm(long long current_frame, float *period_position, const SDL_AudioSpec *spec, float freq,
-                struct fm_operator *ops);
+void fm_draw(SDL_Renderer *renderer);
+void fm_click(int x, int y);
+void fm_unclick();
+void fm_move(int x, int y);
+void fm_init(int x, int y);

@@ -96,28 +96,28 @@ struct ctrl_param_group
     struct ctrl_param *params[MAX_PARAMS_PER_GROUP];
 };
 
-struct ctrl_param op_amp = {
+static struct ctrl_param op_amp = {
     .label = "OP1 AMP",
     .value = 0.01,
     .min = 0.001,
     .max = 0.1,
 };
 
-struct ctrl_param op_freq = {
+static struct ctrl_param op_freq = {
     .label = "OP1 FREQ",
     .value = 0.01,
     .min = 0.001,
     .max = 2.0,
 };
 
-struct ctrl_param amplitude = {
+static struct ctrl_param amplitude = {
     .label = "LINEAR GAIN",
     .value = 0.7,
     .min = 0.1,
     .max = 3,
 };
 
-struct ctrl_param octave = {
+static struct ctrl_param octave = {
     .label = "OCTAVE",
     .value = 0,
     .min = 0,
@@ -125,7 +125,7 @@ struct ctrl_param octave = {
     .quantized_to_int = true,
 };
 
-struct ctrl_param osc_type = {
+static struct ctrl_param osc_type = {
     .label = "PULSE/SAW/FM",
     .value = OSC_TYPE_PULSE,
     .min = 0,
@@ -133,7 +133,7 @@ struct ctrl_param osc_type = {
     .quantized_to_int = true,
 };
 
-struct ctrl_param osc_cnt = {
+static struct ctrl_param osc_cnt = {
     .label = "OSC COUNT",
     .value = 1,
     .min = 1,
@@ -141,193 +141,187 @@ struct ctrl_param osc_cnt = {
     .quantized_to_int = true,
 };
 
-struct ctrl_param osc_detune_step = {
+static struct ctrl_param osc_detune_step = {
     .label = "DETUNE CENTS",
     .value = 0,
     .min = 0,
     .max = 50,
 };
 
-struct ctrl_param cutoff = {
+static struct ctrl_param cutoff = {
     .label = "CUTOFF",
     .value = 17000,
     .min = 50,
     .max = 17000,
 };
-struct ctrl_param resonance = {
+static struct ctrl_param resonance = {
     .label = "RESONANCE",
     .value = 0.0,
     .min = 0.0,
     .max = 0.98,
 };
-struct ctrl_param key_to_cutoff = {
+static struct ctrl_param key_to_cutoff = {
     .label = "KEY TO CUTOFF",
     .value = 0.0,
     .min = 0.0,
     .max = 1.0,
 };
 
-struct ctrl_param cutoff_lfo_freq = {
+static struct ctrl_param cutoff_lfo_freq = {
     .label = "CUTOFF LFO FREQ",
     .value = 0.0,
     .min = 0.0,
     .max = 5.0,
 };
 
-struct ctrl_param cutoff_lfo_amp = {
+static struct ctrl_param cutoff_lfo_amp = {
     .label = "CUTOFF LFO AMP",
     .value = 0.0,
     .min = 0.0,
     .max = 5000.0,
 };
 
-struct ctrl_param base_width = {
+static struct ctrl_param base_width = {
     .label = "PULSE WIDTH",
     .value = 0.5,
     .min = MIN_WIDTH,
     .max = MAX_WIDTH,
 };
-struct ctrl_param pwm_freq = {
+static struct ctrl_param pwm_freq = {
     .label = "PWM FREQ",
     .value = 0.3,
     .min = 0.001,
     .max = 10.0,
 };
-struct ctrl_param pwm_amount = {
+static struct ctrl_param pwm_amount = {
     .label = "PWM AMOUNT",
     .value = 0.0,
     .min = 0.0,
     .max = 0.5,
 };
 
-struct ctrl_param bend_target = {
+static struct ctrl_param bend_target = {
     .label = "BEND",
     .value = 1.0,
     .min = -2.0,
     .max = 2.0,
 };
-float bend = 1.0;
+static float bend = 1.0;
 
-struct ctrl_param dist_level = {
+static struct ctrl_param dist_level = {
     .label = "DIST THRESHOLD",
     .value = 1.0,
     .min = 0.01,
     .max = 1.0,
 };
-struct ctrl_param flip_level = {
+static struct ctrl_param flip_level = {
     .label = "FLIP THRESHOLD",
     .value = 1.1,
     .min = 0.01,
     .max = 1.1,
 };
 
-struct ctrl_param A = {
+static struct ctrl_param A = {
     .label = "A",
     .value = 0.1,
     .min = 0.1,
     .max = 500.0,
 };
-struct ctrl_param D = {
+static struct ctrl_param D = {
     .label = "D",
     .value = 25,
     .min = 0.1,
     .max = 500,
 };
-struct ctrl_param S = {
+static struct ctrl_param S = {
     .label = "S",
     .value = 1,
     .min = 0,
     .max = 1,
 };
-struct ctrl_param R = {
+static struct ctrl_param R = {
     .label = "R",
     .value = 0,
     .min = 0,
     .max = 1000,
 };
 
-struct ctrl_param env_to_cutoff = {
+static struct ctrl_param env_to_cutoff = {
     .label = "ENV TO CUTOFF",
     .value = 0,
     .min = 0,
     .max = 10000,
 };
-struct ctrl_param env_to_amp = {
+static struct ctrl_param env_to_amp = {
     .label = "ENV TO AMP",
     .value = 1.0,
     .min = 0,
     .max = 1.0,
 };
 
-struct ctrl_param delay_ms = {
+static struct ctrl_param delay_ms = {
     .label = "DELAY [MS]",
     .value = 600,
     .min = 0,
     .max = 1000,
 };
 
-struct ctrl_param delay_fb = {
+static struct ctrl_param delay_fb = {
     .label = "DELAY FEEDBACK",
     .value = 0.0,
     .min = 0.0,
     .max = 0.9,
 };
 
-struct ctrl_param chorus_amount = {
+static struct ctrl_param chorus_amount = {
     .label = "CHORUS AMOUNT",
     .value = 0.0,
     .min = 0.0,
     .max = 1.0,
 };
 
-struct ctrl_param chorus_freq = {
+static struct ctrl_param chorus_freq = {
     .label = "CHORUS FREQ",
     .value = 1.0,
     .min = 0.1,
     .max = 5.0,
 };
 
-struct ctrl_param_group tone_ctrls = {
+static struct ctrl_param_group tone_ctrls = {
     .params = {&amplitude, &osc_type, &octave, &osc_cnt, &osc_detune_step, &env_to_amp},
 };
 
-struct ctrl_param_group envelope_ctrls = {
+static struct ctrl_param_group envelope_ctrls = {
     .params = {&A, &D, &S, &R},
 };
 
-struct ctrl_param_group filter_ctrls = {
+static struct ctrl_param_group filter_ctrls = {
     .params = {&cutoff, &resonance, &env_to_cutoff, &key_to_cutoff, &cutoff_lfo_freq, &cutoff_lfo_amp},
 };
 
-struct ctrl_param_group dist_ctrls = {
+static struct ctrl_param_group dist_ctrls = {
     .params = {&dist_level, &flip_level},
 };
 
-struct ctrl_param_group delay_ctrls = {
+static struct ctrl_param_group delay_ctrls = {
     .params = {&delay_fb, &delay_ms},
 };
 
-struct ctrl_param_group pwm_ctrls = {
+static struct ctrl_param_group pwm_ctrls = {
     .params = {&base_width, &pwm_freq, &pwm_amount},
 };
 
-struct ctrl_param_group chorus_ctrls = {
+static struct ctrl_param_group chorus_ctrls = {
     .params = {&chorus_amount, &chorus_freq},
 };
 
-struct ctrl_param_group fm_ctrls = {
-    .params = {&op_amp, &op_freq},
-};
-
-static struct fm_operator fm_ops[NBR_FM_OPS] = {{.amp = &op_amp.value, .freq = &op_freq.value}};
-
 struct ctrl_param_group *param_groups[MAX_GROUPS] = {&tone_ctrls, &envelope_ctrls, &filter_ctrls, &pwm_ctrls,
-                                                     &dist_ctrls, &delay_ctrls,    &chorus_ctrls, &fm_ctrls};
+                                                     &dist_ctrls, &delay_ctrls,    &chorus_ctrls};
 
-struct square_controller *sqc_arr[5] = {};
-struct slide_controller *slc_arr[MAX_PARAMS_PER_GROUP * MAX_GROUPS] = {};
+static struct square_controller *sqc_arr[5] = {};
+static struct slide_controller *slc_arr[MAX_PARAMS_PER_GROUP * MAX_GROUPS] = {};
 
-float pianokey_per_scancode[SDL_SCANCODE_COUNT] = {
+static float pianokey_per_scancode[SDL_SCANCODE_COUNT] = {
     [SDL_SCANCODE_Z] = 1,  [SDL_SCANCODE_S] = 2,  [SDL_SCANCODE_X] = 3,  [SDL_SCANCODE_D] = 4,  [SDL_SCANCODE_C] = 5,
     [SDL_SCANCODE_V] = 6,  [SDL_SCANCODE_G] = 7,  [SDL_SCANCODE_B] = 8,  [SDL_SCANCODE_H] = 9,  [SDL_SCANCODE_N] = 10,
     [SDL_SCANCODE_J] = 11, [SDL_SCANCODE_M] = 12, [SDL_SCANCODE_Q] = 13, [SDL_SCANCODE_2] = 14, [SDL_SCANCODE_W] = 15,
@@ -337,11 +331,11 @@ float pianokey_per_scancode[SDL_SCANCODE_COUNT] = {
 
 };
 
-float key_to_freq[NBR_KEYS] = {
+static float key_to_freq[NBR_KEYS] = {
 
 };
 
-void init_key_to_freq()
+static void init_key_to_freq()
 {
     for (int key = 0; key < 88; key++)
     {
@@ -349,16 +343,16 @@ void init_key_to_freq()
     }
 }
 
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-int waveform_written = 0;
-SDL_FPoint points[WIDTH / X_STEP];
-SDL_AudioStream *stream;
-char *buf;
-long long current_frame = 0;
-int sample_frames;
-int buffer_frames;
-size_t frame_size;
-const SDL_AudioSpec input_spec = {.channels = 1, .format = SDL_AUDIO_S16, .freq = 44100};
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+static int waveform_written = 0;
+static SDL_FPoint points[WIDTH / X_STEP];
+static SDL_AudioStream *stream;
+static char *buf;
+static long long current_frame = 0;
+static int sample_frames;
+static int buffer_frames;
+static size_t frame_size;
+static const SDL_AudioSpec input_spec = {.channels = 1, .format = SDL_AUDIO_S16, .freq = 44100};
 
 static void create_ball(int x, int y)
 {
@@ -569,7 +563,7 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
             {
                 // NO detuning with FM
                 float freq = key_to_freq[voice->key];
-                raw_sample = amplitude.value * render_fm(current_frame, &voice->period_position[0], spec, freq, fm_ops);
+                raw_sample = amplitude.value * fm_render_sample(current_frame, &voice->period_position[0], spec, freq);
             }
             else
             {
@@ -771,6 +765,8 @@ static void draw_waveform(SDL_Renderer *renderer)
 
         sequencer_draw(renderer);
 
+        fm_draw(renderer);
+
         SDL_RenderPresent(renderer);
         waveform_written = 0;
     }
@@ -895,6 +891,8 @@ int main(int argc, char **argv)
     }
 
     text_init(renderer);
+
+    fm_init(200, 200);
 
     sequencer_init(note_change);
 
@@ -1034,6 +1032,8 @@ int main(int argc, char **argv)
                     slide_controller_click(slc, event.button.x, event.button.y);
                 }
 
+                fm_click(event.button.x, event.button.y);
+
                 create_ball(event.button.x, event.button.y);
             }
             else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP)
@@ -1049,6 +1049,8 @@ int main(int argc, char **argv)
                 {
                     slide_controller_unclick(slc);
                 }
+
+                fm_unclick();
             }
             else if (event.type == SDL_EVENT_MOUSE_MOTION)
             {
@@ -1063,6 +1065,7 @@ int main(int argc, char **argv)
                 {
                     slide_controller_move(slc, event.motion.x, event.motion.y);
                 }
+                fm_move(event.motion.x, event.motion.y);
             }
         }
 
