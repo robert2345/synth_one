@@ -1,4 +1,5 @@
 #include "fm.h"
+#include "envelope.h"
 #include "slide_controller.h"
 #include "text.h"
 #include <math.h>
@@ -8,6 +9,7 @@ enum op_param
 {
     OP_PARAM_AMP = 0,
     OP_PARAM_FREQ,
+    OP_PARAM_DETUNE,
     OP_PARAM_A,
     OP_PARAM_D,
     OP_PARAM_S,
@@ -59,6 +61,13 @@ static const struct ctrl_param op_freq = {
     .max = 2.0,
 };
 
+static const struct ctrl_param op_detune = {
+    .label = "OPX DETUNE",
+    .value = 0.01,
+    .min = 0.001,
+    .max = 2.0,
+};
+
 static const struct ctrl_param op_A = {
     .label = "OPX A",
     .value = 0.01,
@@ -85,7 +94,7 @@ static const struct ctrl_param op_R = {
 };
 
 static struct ctrl_param ops[2 * OP_PARAM_NBR_OF * NBR_OPS + 1] = {
-    [OP_PARAM_AMP] = op_amp, [OP_PARAM_FREQ] = op_freq, [OP_PARAM_A] = op_A,
+    [OP_PARAM_AMP] = op_amp, [OP_PARAM_FREQ] = op_freq, [OP_PARAM_DETUNE] = op_detune, [OP_PARAM_A] = op_A,
     [OP_PARAM_D] = op_D,     [OP_PARAM_S] = op_S,       [OP_PARAM_R] = op_R,
 };
 
@@ -97,33 +106,81 @@ static struct ctrl_param_group ops_param_groups[MAX_GROUPS];
 
 static float get_op(int op, enum op_param par)
 {
-    return ops[par + op * OP_PARAM_NBR_OF].value;
+    return ops[par + (op - 1) * OP_PARAM_NBR_OF].value;
+}
+
+struct operator
+{
+    int input_ops[NBR_OPS];
+    int feedback_op;
+    float last_value;
+};
+
+struct algorithm
+{
+    int nbr_carriers;
+    int carriers[NBR_OPS];
+    struct operator ops[NBR_OPS]; // this will host all the operators (except carriers) regardless of how they are
+                                  // connected. Index +1 will be op number
+};
+
+struct algorithm algos[32] = {
+    {.nbr_carriers = 2,
+     .carriers = {1, 3},
+     .ops =
+         {
+             {.input_ops = {2}}, // carrier
+             {.input_ops = {0}},
+             {.input_ops = {4}}, // carrier
+             {.input_ops = {5}},
+             {.input_ops = {6}},
+             {.feedback_op = 6},
+         }},
+    {.nbr_carriers = 1,
+     .carriers = {1},
+     .ops =
+         {
+             {.input_ops = {}}, // carrier
+         }},
+};
+
+float evaluate_operator(struct algorithm *algo, int op, float freq, float time)
+{
+    float modulation = 0;
+    struct operator* op_p = & algo->ops[op - 1];
+
+    for (int i = 0; 0 != op_p->input_ops[i]; i++)
+    {
+        modulation += 0.1 * evaluate_operator(algo, op_p->input_ops[i], freq, time);
+    }
+    if (op_p->feedback_op)
+    {
+        struct operator* feedback_op_p = & algo->ops[op_p->feedback_op - 1];
+        modulation += 0.1 * feedback_op_p->last_value;
+    }
+
+    op_p->last_value =
+        (get_op(op, OP_PARAM_AMP) * cos((freq + get_op(op, OP_PARAM_FREQ) + modulation) * 2 * M_PI * time));
+    return op_p->last_value;
 }
 
 float fm_render_sample(long long current_frame, float *period_position, const SDL_AudioSpec *spec, float freq)
 {
+    float data = 0;
     *period_position += freq / spec->freq;
     if (*period_position >= 1.0)
     {
         *period_position = 0.0;
     }
     float time = current_frame * 1.0 / spec->freq;
-    float mod_one;
 
-    int algo = algorithm.value;
-    switch (algo)
+    struct algorithm *algo = &algos[(int)algorithm.value];
+    for (int i = 0; i < algo->nbr_carriers; i++)
     {
-    case 0:
-        mod_one = get_op(1, OP_PARAM_AMP) * cos(freq * get_op(1, OP_PARAM_FREQ) * 2 * M_PI * time);
-        break;
-    case 1:
-        mod_one = 0.0;
-        break;
-    default:
-        printf("Algo %d not implemented!\n", algo);
+        data += evaluate_operator(algo, algo->carriers[i], freq, time) / algo->nbr_carriers;
     }
 
-    return (get_op(0, OP_PARAM_AMP) * cos((freq + get_op(0, OP_PARAM_FREQ) + mod_one) * 2 * M_PI * time));
+    return data;
 }
 
 void fm_init(int x_in, int y_in)
@@ -185,6 +242,34 @@ void fm_init(int x_in, int y_in)
     printf("init done");
 }
 
+#define OP_START_X 300
+#define OP_WIDTH 30
+float draw_operator(SDL_Renderer *renderer, struct algorithm *algo, int op, SDL_FPoint *op_positions, float left_most,
+                    float *right_most, float y)
+{
+    float modulation = 0;
+    struct operator* op_p = & algo->ops[op - 1];
+
+    for (int i = 0; 0 != op_p->input_ops[i]; i++)
+    {
+        if (i > 0)
+            *right_most += OP_WIDTH;
+        draw_operator(renderer, algo, op_p->input_ops[i], op_positions, *right_most, right_most, y - OP_WIDTH);
+    }
+    /*
+    if (op_p->feedback_op)
+    {
+    }
+    */
+
+    op_positions[op - 1].x = (left_most + *right_most) / 2;
+    op_positions[op - 1].y = y;
+    printf("right_most %f\n", *right_most);
+
+    text_draw(renderer, "0", op_positions[op - 1].x, op_positions[op - 1].y, false);
+
+    return op_p->last_value;
+}
 void fm_draw(SDL_Renderer *renderer)
 {
     int i;
@@ -193,6 +278,17 @@ void fm_draw(SDL_Renderer *renderer)
     {
         slide_controller_draw(renderer, slc);
     }
+    /*
+    SDL_FPoint *op_positions[NBR_OPS];
+
+    struct algorithm *algo = &algos[(int)algorithm.value];
+    float right_most = OP_START_X;
+    for (int i = 0; i < algo->nbr_carriers; i++)
+    {
+        draw_operator(renderer, algo, algo->carriers[i], op_positions, right_most, &right_most, 600);
+        right_most += OP_WIDTH;
+    }
+    */
 }
 
 void fm_click(int x, int y)
