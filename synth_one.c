@@ -402,7 +402,7 @@ static void parse_and_apply_setting(char *string)
         {
             int len = strlen(p->label);
             char tmp = string[len];
-            if (string[len] != ' ')
+            if (string[len+1] != '=')
                 continue;
             string[len] = '\0';
             if (0 == strcmp(string, p->label))
