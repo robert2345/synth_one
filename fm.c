@@ -242,53 +242,114 @@ void fm_init(int x_in, int y_in)
     printf("init done");
 }
 
-#define OP_START_X 300
+#define OP_START_X 600
+#define OP_START_Y 250
 #define OP_WIDTH 30
 float draw_operator(SDL_Renderer *renderer, struct algorithm *algo, int op, SDL_FPoint *op_positions, float left_most,
                     float *right_most, float y)
 {
+    static SDL_FRect rect = {.w = OP_WIDTH, .h = OP_WIDTH};
     float modulation = 0;
     struct operator* op_p = & algo->ops[op - 1];
 
     for (int i = 0; 0 != op_p->input_ops[i]; i++)
     {
         if (i > 0)
-            *right_most += OP_WIDTH;
-        draw_operator(renderer, algo, op_p->input_ops[i], op_positions, *right_most, right_most, y - OP_WIDTH);
+            *right_most += OP_WIDTH * 2;
+        draw_operator(renderer, algo, op_p->input_ops[i], op_positions, *right_most, right_most, y - OP_WIDTH * 2);
     }
-    /*
-    if (op_p->feedback_op)
-    {
-    }
-    */
 
-    op_positions[op - 1].x = (left_most + *right_most) / 2;
+    float x = (left_most + *right_most) / 2;
+    op_positions[op - 1].x = x + OP_WIDTH / 2;
     op_positions[op - 1].y = y;
-    printf("right_most %f\n", *right_most);
+    rect.x = x;
+    rect.y = y;
 
-    text_draw(renderer, "0", op_positions[op - 1].x, op_positions[op - 1].y, false);
+    char label[2] = {'0' + op, '\0'};
+    SDL_SetRenderDrawColor(renderer, 200, 0, 55, 255);
+    text_draw(renderer, label, x + OP_WIDTH / 2 - text_get_width() / 2, y + OP_WIDTH / 2 - text_get_height() / 2,
+              false);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_RenderRect(renderer, &rect);
 
     return op_p->last_value;
 }
+
+#define LINE_DISTANCE (5)
+void draw_operator_connections(SDL_Renderer *renderer, struct algorithm *algo, int op, SDL_FPoint *op_positions)
+{
+    float modulation = 0;
+    struct operator* op_p = & algo->ops[op - 1];
+
+    for (int i = 0; 0 != op_p->input_ops[i]; i++)
+    {
+        draw_operator_connections(renderer, algo, op_p->input_ops[i], op_positions);
+        SDL_FPoint tmp_points[2] = {op_positions[op - 1], op_positions[op_p->input_ops[i] - 1]};
+        tmp_points[1].y += OP_WIDTH;
+        SDL_RenderLines(renderer, tmp_points, 2);
+    }
+    if (op_p->feedback_op)
+    {
+        SDL_FPoint tmp_points[6] = {op_positions[op - 1],
+                                    op_positions[op - 1],
+                                    op_positions[op - 1],
+                                    op_positions[op_p->feedback_op - 1],
+                                    op_positions[op_p->feedback_op - 1],
+                                    op_positions[op_p->feedback_op - 1]};
+
+        tmp_points[1].y -= LINE_DISTANCE;
+
+        tmp_points[2].y -= LINE_DISTANCE;
+        tmp_points[2].x += OP_WIDTH / 2 + LINE_DISTANCE;
+
+        // this guy is special, since he should get x coord from one "port" and y coord from another
+        tmp_points[3].y += OP_WIDTH + LINE_DISTANCE;
+        tmp_points[3].x = tmp_points[2].x;
+        ;
+
+        tmp_points[4].y += OP_WIDTH + LINE_DISTANCE;
+        tmp_points[5].y += OP_WIDTH;
+
+        SDL_RenderLines(renderer, tmp_points, 6);
+    }
+}
+
 void fm_draw(SDL_Renderer *renderer)
 {
     int i;
     struct slide_controller *slc;
+
     for (i = 0; (slc = slc_arr[i]); i++)
     {
         slide_controller_draw(renderer, slc);
     }
-    /*
-    SDL_FPoint *op_positions[NBR_OPS];
+
+    SDL_FPoint op_positions[NBR_OPS];
 
     struct algorithm *algo = &algos[(int)algorithm.value];
     float right_most = OP_START_X;
     for (int i = 0; i < algo->nbr_carriers; i++)
     {
-        draw_operator(renderer, algo, algo->carriers[i], op_positions, right_most, &right_most, 600);
-        right_most += OP_WIDTH;
+        draw_operator(renderer, algo, algo->carriers[i], op_positions, right_most, &right_most, OP_START_Y);
+        right_most += OP_WIDTH * 2;
+
+        SDL_FPoint *pos = &op_positions[algo->carriers[i] - 1];
+        SDL_RenderLine(renderer, pos->x, pos->y + OP_WIDTH, pos->x, pos->y + OP_WIDTH + LINE_DISTANCE);
+        if (i == algo->nbr_carriers - 1)
+        {
+            SDL_FPoint *first_pos = &op_positions[algo->carriers[0] - 1];
+            SDL_FPoint *second_pos = &op_positions[algo->carriers[i] - 1];
+            SDL_RenderLine(renderer, first_pos->x, first_pos->y + OP_WIDTH + LINE_DISTANCE, second_pos->x,
+                           second_pos->y + OP_WIDTH + LINE_DISTANCE);
+            SDL_RenderLine(renderer, (first_pos->x + second_pos->x) / 2, first_pos->y + OP_WIDTH + LINE_DISTANCE,
+                           (first_pos->x + second_pos->x) / 2, first_pos->y + OP_WIDTH + 2 * LINE_DISTANCE);
+        }
     }
-    */
+
+    for (int i = 0; i < algo->nbr_carriers; i++)
+    {
+        draw_operator_connections(renderer, algo, algo->carriers[i], op_positions);
+    }
 }
 
 void fm_click(int x, int y)
