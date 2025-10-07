@@ -402,7 +402,7 @@ static void parse_and_apply_setting(char *string)
         {
             int len = strlen(p->label);
             char tmp = string[len];
-            if (string[len+1] != '=')
+            if (string[len + 1] != '=')
                 continue;
             string[len] = '\0';
             if (0 == strcmp(string, p->label))
@@ -446,7 +446,7 @@ static void key_press(int key)
     struct voice *oldest_voice = &voices[0];
 
     // notes higher that 0x53 are really bad so no need to even try
-    if (key >= 0x35)
+    if (key >= 0x53)
         return;
     pthread_mutex_lock(&mutex);
     // find oldest empty spot and if key is already in the array
