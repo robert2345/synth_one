@@ -4,6 +4,7 @@
 #include "text.h"
 #include <math.h>
 #include <stdio.h>
+#include "linear_control.h"
 
 enum op_param
 {
@@ -18,24 +19,9 @@ enum op_param
 };
 
 #define NBR_OPS (8)
-#define MAX_PARAMS_PER_GROUP (OP_PARAM_NBR_OF + 1)
 #define MAX_GROUPS (NBR_OPS + 2) // choose algo and # operators.
 
 static struct slide_controller *slc_arr[MAX_PARAMS_PER_GROUP * MAX_GROUPS] = {};
-
-struct ctrl_param
-{
-    char label[25];
-    float value;
-    float min;
-    float max;
-    bool quantized_to_int;
-};
-
-struct ctrl_param_group
-{
-    struct ctrl_param *params[MAX_PARAMS_PER_GROUP];
-};
 
 static struct ctrl_param_group *param_groups[MAX_GROUPS];
 
@@ -164,14 +150,9 @@ float evaluate_operator(struct algorithm *algo, int op, float freq, float time)
     return op_p->last_value;
 }
 
-float fm_render_sample(long long current_frame, float *period_position, const SDL_AudioSpec *spec, float freq)
+float fm_render_sample(long long current_frame, const SDL_AudioSpec *spec, float freq)
 {
     float data = 0;
-    *period_position += freq / spec->freq;
-    if (*period_position >= 1.0)
-    {
-        *period_position = 0.0;
-    }
     float time = current_frame * 1.0 / spec->freq;
 
     struct algorithm *algo = &algos[(int)algorithm.value];
@@ -187,7 +168,6 @@ void fm_init(int x_in, int y_in)
 {
     int i, j = 0;
 
-    printf("init start");
     // Initialize all the parameters for the operators so they can be drawn and tweaked.
     for (i = 0; i < NBR_OPS; i++)
     {
@@ -239,7 +219,6 @@ void fm_init(int x_in, int y_in)
             y += 3 * margin;
         }
     }
-    printf("init done");
 }
 
 #define OP_START_X 600

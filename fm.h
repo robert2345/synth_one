@@ -13,4 +13,4 @@ void fm_click(int x, int y);
 void fm_unclick();
 void fm_move(int x, int y);
 void fm_init(int x, int y);
-float fm_render_sample(long long current_frame, float *period_position, const SDL_AudioSpec *spec, float freq);
+float fm_render_sample(long long current_frame, const SDL_AudioSpec *spec, float freq);

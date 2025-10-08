@@ -19,45 +19,27 @@
 #include "fm.h"
 #include "low_pass_filter.h"
 #include "midi.h"
+#include "osc.h"
 #include "sequencer.h"
 #include "slide_controller.h"
 #include "square_controller.h"
 #include "text.h"
+#include "util.h"
 
 #define WIDTH (1024)
 #define HEIGHT (768)
 #define X_STEP (1)
 #define WAVEFORM_LEN (WIDTH / X_STEP)
 
-#define NBR_VOICES (8)
-#define MAX_OSC_COUNT (4) // per voice
-
-#define min(x, y) ((x) < (y) ? x : y)
-#define max(x, y) ((x) < (y) ? y : x)
-
-#define MAX_WIDTH (0.99)
-#define MIN_WIDTH (0.01)
-
-#define NBR_KEYS (88)
-
 #define MAX_DELAY_MS (750)
 
-#define MAX_PARAMS_PER_GROUP (8)
-#define MAX_GROUPS (9)
-
 #define LINE_LEN (100)
+
+#define MAX_GROUPS (9)
 
 #define DEFAULT_SETTINGS_FILE_NAME "saved_settings.txt"
 
 #define NBR_BALLS (20)
-
-enum osc_type
-{
-    OSC_TYPE_PULSE,
-    OSC_TYPE_SAW,
-    OSC_TYPE_FM,
-    OSC_TYPE_COUNT,
-};
 
 static struct ball_state *balls[NBR_BALLS];
 static int ball_idx = 0;
@@ -73,28 +55,14 @@ static void pr_sdl_err()
 struct voice
 {
     int key; // 0 is off, 1 is a C
-    float period_position[MAX_OSC_COUNT];
     long long released;
     long long pressed;
     struct env_state env;
     struct filter_state filter;
+    struct osc_state osc;
 };
 
 struct voice voices[NBR_VOICES] = {};
-
-struct ctrl_param
-{
-    const char *label;
-    float value;
-    float min;
-    float max;
-    bool quantized_to_int;
-};
-
-struct ctrl_param_group
-{
-    struct ctrl_param *params[MAX_PARAMS_PER_GROUP];
-};
 
 static struct ctrl_param op_amp = {
     .label = "OP1 AMP",
@@ -133,21 +101,6 @@ static struct ctrl_param osc_type = {
     .quantized_to_int = true,
 };
 
-static struct ctrl_param osc_cnt = {
-    .label = "OSC COUNT",
-    .value = 1,
-    .min = 1,
-    .max = MAX_OSC_COUNT,
-    .quantized_to_int = true,
-};
-
-static struct ctrl_param osc_detune_step = {
-    .label = "DETUNE CENTS",
-    .value = 0,
-    .min = 0,
-    .max = 50,
-};
-
 static struct ctrl_param cutoff = {
     .label = "CUTOFF",
     .value = 17000,
@@ -179,25 +132,6 @@ static struct ctrl_param cutoff_lfo_amp = {
     .value = 0.0,
     .min = 0.0,
     .max = 5000.0,
-};
-
-static struct ctrl_param base_width = {
-    .label = "PULSE WIDTH",
-    .value = 0.5,
-    .min = MIN_WIDTH,
-    .max = MAX_WIDTH,
-};
-static struct ctrl_param pwm_freq = {
-    .label = "PWM FREQ",
-    .value = 0.3,
-    .min = 0.001,
-    .max = 10.0,
-};
-static struct ctrl_param pwm_amount = {
-    .label = "PWM AMOUNT",
-    .value = 0.0,
-    .min = 0.0,
-    .max = 0.5,
 };
 
 static struct ctrl_param bend_target = {
@@ -288,7 +222,7 @@ static struct ctrl_param chorus_freq = {
 };
 
 static struct ctrl_param_group tone_ctrls = {
-    .params = {&amplitude, &osc_type, &octave, &osc_cnt, &osc_detune_step, &env_to_amp},
+    .params = {&amplitude, &osc_type, &octave, &env_to_amp},
 };
 
 static struct ctrl_param_group envelope_ctrls = {
@@ -307,15 +241,11 @@ static struct ctrl_param_group delay_ctrls = {
     .params = {&delay_fb, &delay_ms},
 };
 
-static struct ctrl_param_group pwm_ctrls = {
-    .params = {&base_width, &pwm_freq, &pwm_amount},
-};
-
 static struct ctrl_param_group chorus_ctrls = {
     .params = {&chorus_amount, &chorus_freq},
 };
 
-struct ctrl_param_group *param_groups[MAX_GROUPS] = {&tone_ctrls, &envelope_ctrls, &filter_ctrls, &pwm_ctrls,
+struct ctrl_param_group *param_groups[MAX_GROUPS] = {&tone_ctrls, &envelope_ctrls, &filter_ctrls,
                                                      &dist_ctrls, &delay_ctrls,    &chorus_ctrls};
 
 static struct square_controller *sqc_arr[5] = {};
@@ -330,18 +260,6 @@ static float pianokey_per_scancode[SDL_SCANCODE_COUNT] = {
     [SDL_SCANCODE_9] = 26, [SDL_SCANCODE_O] = 27, [SDL_SCANCODE_0] = 28, [SDL_SCANCODE_P] = 29,
 
 };
-
-static float key_to_freq[NBR_KEYS] = {
-
-};
-
-static void init_key_to_freq()
-{
-    for (int key = 0; key < 88; key++)
-    {
-        key_to_freq[key] = 440.0 * pow(2, ((key - 49) / 12.0));
-    }
-}
 
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 static int waveform_written = 0;
@@ -514,88 +432,26 @@ static void note_change(int key_on, int key_off)
     key_press(key_on);
 };
 
-static float render_pulse(const long long current_frame, float *period_pos, const SDL_AudioSpec *spec, float freq,
-                          float width)
-{
-    *period_pos += freq / spec->freq;
-    if (*period_pos > 1.0)
-    {
-        *period_pos = 0.0;
-    }
-
-    if (*period_pos > width)
-        return -1.0;
-    else
-        return 1.0;
-}
-
-static float render_saw(const long long current_frame, float *period_pos, const SDL_AudioSpec *spec, float freq,
-                        float width)
-{
-    *period_pos += freq / spec->freq;
-    if (*period_pos > 1.0)
-    {
-        *period_pos = 0.0;
-    }
-
-    return -1.0 + 2.0 * *period_pos;
-}
-
 static float render_sample(const long long current_frame, const SDL_AudioSpec *spec)
 {
     float sample = 0.0;
-    float width = base_width.value + pwm_amount.value * cosine_render_sample(current_frame, spec, pwm_freq.value);
-
-    width = max(MIN_WIDTH, width);
-    width = min(MAX_WIDTH, width);
     for (int i = 0; i < NBR_VOICES; i++)
     {
         struct voice *voice = &voices[i];
         if (voice->key != 0)
         {
             float raw_sample = 0.0;
-            float up_offset_per_osc =
-                (key_to_freq[voice->key + 1] - key_to_freq[voice->key]) / 100 * osc_detune_step.value;
-            float down_offset_per_osc =
-                (key_to_freq[voice->key] - key_to_freq[voice->key - 1]) / 100 * osc_detune_step.value;
-            int osc_detune = -((int)osc_cnt.value) / 2;
+            float freq = key_to_freq[voice->key];
             if (osc_type.value == OSC_TYPE_FM)
             {
-                // NO detuning with FM
-                float freq = key_to_freq[voice->key];
-                raw_sample = amplitude.value * fm_render_sample(current_frame, &voice->period_position[0], spec, freq);
+                raw_sample = amplitude.value * fm_render_sample(current_frame, spec, freq);
             }
             else
             {
-                for (int osc = 0; osc < (int)osc_cnt.value; osc++)
-                {
-
-                    float freq = key_to_freq[voice->key];
-                    if (osc_detune < 0)
-                        freq += osc_detune * down_offset_per_osc;
-                    else
-                        freq += osc_detune * down_offset_per_osc;
-
-                    freq = bend * freq;
-
-                    if (osc_type.value == OSC_TYPE_PULSE)
-                    {
-                        raw_sample += amplitude.value / NBR_VOICES *
-                                      render_pulse(current_frame, &voice->period_position[osc], spec, freq, width);
-                    }
-                    else if (osc_type.value == OSC_TYPE_SAW)
-                    {
-                        raw_sample += amplitude.value / NBR_VOICES *
-                                      render_saw(current_frame, &voice->period_position[osc], spec, freq, width);
-                    }
-                    else
-                    {
-                        fprintf(stderr, "Invalid oscillator type\n");
-                    }
-
-                    osc_detune += 1;
-                }
+                raw_sample = amplitude.value * osc_render_sample(current_frame, &voice->osc, spec,
+                                                                 voice->key, osc_type.value);
             }
+
             // envelope
             raw_sample = raw_sample * (1.0 - env_to_amp.value) +
                          raw_sample * env_to_amp.value *
@@ -649,7 +505,6 @@ static bool render_sample_frames(long long *current_frame, int frames, char *buf
 
     for (s = 0; s < frames; s++)
     {
-        bool new_period = !lowest_voice || lowest_voice->period_position[0] == 0.0f;
 
         // what is going on with channels here? only one buffer so it seems a bit
         // broken if multiple channels.
@@ -659,31 +514,14 @@ static bool render_sample_frames(long long *current_frame, int frames, char *buf
             write_sample(sample, &buf, spec);
         }
 
-        if (new_period)
-        {
-#define BEND_STEP (0.001)
-            float bend_diff = bend_target.value - bend;
-            if (bend_diff > BEND_STEP)
-            {
-                bend += BEND_STEP;
-            }
-            else if (bend_diff < -BEND_STEP)
-            {
-                bend -= BEND_STEP;
-            }
-            else
-            {
-                bend = bend_target.value;
-            }
-        }
-
         // write to visualisation buffer
         {
             int lowest_key = lowest_voice ? lowest_voice->key : 1;
-            int samples_per_period = max(WAVEFORM_LEN, spec->freq / (bend * key_to_freq[lowest_key]));
-            bool on_grid = (*current_frame % (2 * samples_per_period / WAVEFORM_LEN) == 0) &&
-                           waveform_written < WAVEFORM_LEN && waveform_written != 0;
-            if ((new_period && (waveform_written == 0)) || on_grid)
+            int samples_per_period = spec->freq / (key_to_freq[lowest_key]);
+	    bool period_start = *current_frame % samples_per_period == 0;
+            bool on_grid = (*current_frame % max(1, (samples_per_period / WAVEFORM_LEN)) == 0);
+                           
+            if ((waveform_written == 0 && period_start) || (waveform_written > 0 && waveform_written < WAVEFORM_LEN && on_grid))
             {
                 points[waveform_written].y = HEIGHT / 2 + HEIGHT / 2 * sample;
                 waveform_written++;
@@ -915,6 +753,7 @@ int main(int argc, char **argv)
         voices[i].pressed = 0;
         voices[i].released = 0;
 
+        osc_init(&voices[i].osc);
         envelope_init(&voices[i].env, &input_spec);
         low_pass_filter_init(&voices[i].filter, res, cutoff.value, input_spec.freq);
     }
