@@ -441,15 +441,15 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
         if (voice->key != 0)
         {
             float raw_sample = 0.0;
-            float freq = key_to_freq[voice->key];
+            float freq = key_to_freq[voice->key][0];
             if (osc_type.value == OSC_TYPE_FM)
             {
                 raw_sample = amplitude.value * fm_render_sample(current_frame, spec, freq);
             }
             else
             {
-                raw_sample = amplitude.value * osc_render_sample(current_frame, &voice->osc, spec,
-                                                                 voice->key, osc_type.value);
+                raw_sample =
+                    amplitude.value * osc_render_sample(current_frame, &voice->osc, spec, voice->key, osc_type.value);
             }
 
             // envelope
@@ -457,7 +457,7 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
                          raw_sample * env_to_amp.value *
                              envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame);
             // filter
-            int cut_freq = min(17000, max(50, key_to_cutoff.value * key_to_freq[voice->key] + cutoff.value +
+            int cut_freq = min(17000, max(50, key_to_cutoff.value * key_to_freq[voice->key][0] + cutoff.value +
                                                   env_to_cutoff.value * envelope_get(&voice->env, A.value, D.value,
                                                                                      S.value, R.value, current_frame) +
                                                   cutoff_lfo_amp.value * cosine_render_sample(current_frame, spec,
@@ -517,11 +517,12 @@ static bool render_sample_frames(long long *current_frame, int frames, char *buf
         // write to visualisation buffer
         {
             int lowest_key = lowest_voice ? lowest_voice->key : 1;
-            int samples_per_period = spec->freq / (key_to_freq[lowest_key]);
-	    bool period_start = *current_frame % samples_per_period == 0;
+            int samples_per_period = spec->freq / (key_to_freq[lowest_key][0]);
+            bool period_start = *current_frame % samples_per_period == 0;
             bool on_grid = (*current_frame % max(1, (samples_per_period / WAVEFORM_LEN)) == 0);
-                           
-            if ((waveform_written == 0 && period_start) || (waveform_written > 0 && waveform_written < WAVEFORM_LEN && on_grid))
+
+            if ((waveform_written == 0 && period_start) ||
+                (waveform_written > 0 && waveform_written < WAVEFORM_LEN && on_grid))
             {
                 points[waveform_written].y = HEIGHT / 2 + HEIGHT / 2 * sample;
                 waveform_written++;
@@ -603,7 +604,18 @@ static void draw_waveform(SDL_Renderer *renderer)
 
         sequencer_draw(renderer);
 
-        fm_draw(renderer);
+        switch ((int)osc_type.value)
+        {
+        case OSC_TYPE_FM:
+            fm_draw(renderer);
+            break;
+        case OSC_TYPE_PULSE:
+        case OSC_TYPE_SAW:
+            osc_draw(renderer);
+            break;
+        default:
+            fprintf(stderr, "Invalid oscillator type\n");
+        }
 
         SDL_RenderPresent(renderer);
         waveform_written = 0;
@@ -753,7 +765,7 @@ int main(int argc, char **argv)
         voices[i].pressed = 0;
         voices[i].released = 0;
 
-        osc_init(&voices[i].osc);
+        osc_init(&voices[i].osc, 200, 200);
         envelope_init(&voices[i].env, &input_spec);
         low_pass_filter_init(&voices[i].filter, res, cutoff.value, input_spec.freq);
     }
@@ -871,7 +883,10 @@ int main(int argc, char **argv)
                     slide_controller_click(slc, event.button.x, event.button.y);
                 }
 
-                fm_click(event.button.x, event.button.y);
+                if (osc_type.value == OSC_TYPE_FM)
+                    fm_click(event.button.x, event.button.y);
+                else
+                    osc_click(event.button.x, event.button.y);
 
                 create_ball(event.button.x, event.button.y);
             }
@@ -889,7 +904,10 @@ int main(int argc, char **argv)
                     slide_controller_unclick(slc);
                 }
 
-                fm_unclick();
+                if (osc_type.value == OSC_TYPE_FM)
+                    fm_unclick();
+                else
+                    osc_unclick();
             }
             else if (event.type == SDL_EVENT_MOUSE_MOTION)
             {
@@ -904,7 +922,10 @@ int main(int argc, char **argv)
                 {
                     slide_controller_move(slc, event.motion.x, event.motion.y);
                 }
-                fm_move(event.motion.x, event.motion.y);
+                if (osc_type.value == OSC_TYPE_FM)
+                    fm_move(event.motion.x, event.motion.y);
+                else
+                    osc_move(event.motion.x, event.motion.y);
             }
         }
 
