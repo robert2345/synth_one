@@ -287,28 +287,7 @@ static size_t calc_frame_size(const SDL_AudioSpec *spec)
     return spec->channels * SDL_AUDIO_BYTESIZE(spec->format);
 }
 
-static void save_settings()
-{
-    char filename[] = DEFAULT_SETTINGS_FILE_NAME;
-    FILE *f = fopen(filename, "w");
-    if (f)
-    {
-        int i = 0;
-        struct ctrl_param_group *pg;
-        while ((pg = param_groups[i++]))
-        {
-            struct ctrl_param *p;
-            int j = 0;
-            while ((p = pg->params[j++]))
-            {
-                fprintf(f, "%s = %f\n", p->label, p->value);
-            }
-        }
-        fclose(f);
-    }
-}
-
-static void parse_and_apply_setting(char *string)
+static void main_save_settings(FILE *f)
 {
     int i = 0;
     struct ctrl_param_group *pg;
@@ -318,21 +297,56 @@ static void parse_and_apply_setting(char *string)
         int j = 0;
         while ((p = pg->params[j++]))
         {
-            int len = strlen(p->label);
-            char tmp = string[len];
-            if (string[len + 1] != '=')
-                continue;
-            string[len] = '\0';
-            if (0 == strcmp(string, p->label))
-            {
-                p->value = atof(&string[len + 3]);
-                string[len] = tmp;
-                printf("%s\nRead %s with value %f\n", string, p->label, p->value);
-                break;
-            }
-            string[len] = tmp;
+            fprintf(f, "%s = %f\n", p->label, p->value);
         }
     }
+}
+static void save_settings()
+{
+    char filename[] = DEFAULT_SETTINGS_FILE_NAME;
+    FILE *f = fopen(filename, "w");
+    if (f)
+    {
+        main_save_settings(f);
+        fm_save_settings(f);
+        fclose(f);
+    }
+}
+
+static bool main_read_setting(char *line)
+{
+    int i = 0;
+    struct ctrl_param_group *pg;
+    bool ret = false;
+    while ((pg = param_groups[i++]))
+    {
+        struct ctrl_param *p;
+        int j = 0;
+        while ((p = pg->params[j++]))
+        {
+            int len = strlen(p->label);
+            char tmp = line[len];
+            if (line[len + 1] != '=')
+                continue;
+            line[len] = '\0';
+            if (0 == strcmp(line, p->label))
+            {
+                int s = 0;
+                struct slide_controller *slc;
+                p->value = atof(&line[len + 3]);
+                line[len] = tmp;
+                printf("%s: %s Read %s with value %f\n", __func__, line, p->label, p->value);
+                ret = true;
+                for (s = 0; (slc = slc_arr[s]); s++)
+                {
+                    slide_controller_set_pos_from_value(slc);
+                }
+                break;
+            }
+            line[len] = tmp;
+        }
+    }
+    return ret;
 }
 
 static void load_settings(char *filename)
@@ -351,7 +365,9 @@ static void load_settings(char *filename)
         if (c == '\n')
         {
             line[i] = '\0';
-            parse_and_apply_setting(line);
+            if (main_read_setting(line) || fm_read_setting(line))
+            {
+            }
             i = 0;
             continue;
         }
@@ -689,12 +705,6 @@ int main(int argc, char **argv)
 
     signal(SIGINT, sig_handler);
 
-    // SETTINGS
-    if (argc == 2)
-        load_settings(argv[1]);
-    else
-        load_settings(DEFAULT_SETTINGS_FILE_NAME);
-
     // VIDEO STUFF
     window = SDL_CreateWindow("Synth One",      // window title
                               WIDTH,            // width, in pixels
@@ -714,6 +724,9 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    text_init(renderer);
+
+    pthread_mutex_lock(&mutex);
     {
         int i, j, k = 0;
         struct ctrl_param_group *pg;
@@ -731,34 +744,37 @@ int main(int argc, char **argv)
             while ((p = pg->params[j++]))
             {
                 x = margin + y / (HEIGHT - tot_height) * (WIDTH - 2 * margin - width);
-                slc_arr[k++] = slide_controller_create(
-                    x, y % (HEIGHT - tot_height), width, height,
-                    (struct linear_control){&p->value, p->min, p->max, p->quantized_to_int}, p->label);
+                struct linear_control placeholder = {&p->value, p->min, p->max, p->quantized_to_int};
+                slc_arr[k++] = slide_controller_create(x, y % (HEIGHT - tot_height), width, height,
+                                                       (struct linear_control)placeholder, p->label);
                 y += (margin + height + label_height);
             }
             y += 3 * margin;
         }
     }
-
-    text_init(renderer);
-
-    fm_init(200, 200);
-
-    sequencer_init(note_change);
-
-    ball_init(WIDTH, HEIGHT, X_STEP);
+    pthread_mutex_unlock(&mutex);
 
     if ((res = setup_video_timer(&video_timer)))
         return res;
 
+    // initialization of sub modules
+    fm_init(200, 200);
+    delay_init(&input_spec, MAX_DELAY_MS);
+    sequencer_init(note_change);
+    ball_init(WIDTH, HEIGHT, X_STEP);
+
     // MIDI STUFF
     snd_rawmidi_t *midi_in = midi_start();
+
+    // SETTINGS
+    if (argc == 2)
+        load_settings(argv[1]);
+    else
+        load_settings(DEFAULT_SETTINGS_FILE_NAME);
 
     // AUDIO STUFF
 
     init_key_to_freq();
-
-    delay_init(&input_spec, MAX_DELAY_MS);
 
     for (int i = 0; i < NBR_VOICES; i++)
     {

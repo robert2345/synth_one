@@ -27,3 +27,4 @@ struct slide_controller *slide_controller_create(int x, int y, int width, int he
                                                  const char *label);
 
 void slide_controller_destroy(struct slide_controller *sc);
+void slide_controller_set_pos_from_value(struct slide_controller *sc);

@@ -36,7 +36,7 @@ static void linear_control_set(struct linear_control *lc, float setting)
     *lc->target = value;
 }
 
-static void set_pos_from_value(struct slide_controller *sc)
+void slide_controller_set_pos_from_value(struct slide_controller *sc)
 {
     int mx, my;
     struct linear_control *control = &sc->control;
@@ -66,7 +66,7 @@ void slide_controller_move(struct slide_controller *sc, int x, int y)
         {
             linear_control_set(&sc->control, 1.0 * (y - sc->y) / sc->height);
         }
-        set_pos_from_value(sc);
+        slide_controller_set_pos_from_value(sc);
     }
 }
 
@@ -82,7 +82,7 @@ void slide_controller_click(struct slide_controller *sc, int x, int y)
         {
             linear_control_set(&sc->control, 1.0 * (y - sc->y) / sc->height);
         }
-        set_pos_from_value(sc);
+        slide_controller_set_pos_from_value(sc);
         sc->clicked = true;
     }
 }
@@ -123,7 +123,7 @@ struct slide_controller *slide_controller_create(int x, int y, int width, int he
     sc->label = label;
 
     // calculate initial marker position
-    set_pos_from_value(sc);
+    slide_controller_set_pos_from_value(sc);
 
     sc->border_points[0].x = x;
     sc->border_points[0].y = y;

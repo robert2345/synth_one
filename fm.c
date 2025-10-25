@@ -1,10 +1,11 @@
 #include "fm.h"
 #include "envelope.h"
+#include "linear_control.h"
 #include "slide_controller.h"
 #include "text.h"
 #include <math.h>
 #include <stdio.h>
-#include "linear_control.h"
+#include <stdlib.h>
 
 enum op_param
 {
@@ -358,5 +359,56 @@ void fm_move(int x, int y)
     for (i = 0; (slc = slc_arr[i]); i++)
     {
         slide_controller_move(slc, x, y);
+    }
+}
+
+bool fm_read_setting(char *line)
+{
+    int i = 0;
+    struct ctrl_param_group *pg;
+    bool ret = false;
+    while ((pg = param_groups[i++]))
+    {
+        struct ctrl_param *p;
+        int j = 0;
+        while ((p = pg->params[j++]))
+        {
+            int len = strlen(p->label);
+            char tmp = line[len];
+            if (line[len + 1] != '=')
+                continue;
+            line[len] = '\0';
+            if (0 == strcmp(line, p->label))
+            {
+                int s = 0;
+                struct slide_controller *slc;
+                p->value = atof(&line[len + 3]);
+                line[len] = tmp;
+                printf("%s: %s Read %s with value %f\n", __func__, line, p->label, p->value);
+                ret = true;
+                for (s = 0; (slc = slc_arr[s]); s++)
+                {
+                    slide_controller_set_pos_from_value(slc);
+                }
+                break;
+            }
+            line[len] = tmp;
+        }
+    }
+    return ret;
+}
+
+void fm_save_settings(FILE *f)
+{
+    int i = 0;
+    struct ctrl_param_group *pg;
+    while ((pg = param_groups[i++]))
+    {
+        struct ctrl_param *p;
+        int j = 0;
+        while ((p = pg->params[j++]))
+        {
+            fprintf(f, "%s = %f\n", p->label, p->value);
+        }
     }
 }
