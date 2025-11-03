@@ -11,7 +11,6 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "ball.h"
 #include "cosine.h"
 #include "delay.h"
 #include "distortion.h"
@@ -40,9 +39,6 @@
 #define DEFAULT_SETTINGS_FILE_NAME "saved_settings.txt"
 
 #define NBR_BALLS (20)
-
-static struct ball_state *balls[NBR_BALLS];
-static int ball_idx = 0;
 
 static bool synth_abort = false;
 
@@ -272,16 +268,6 @@ static int buffer_frames;
 static size_t frame_size;
 static const SDL_AudioSpec input_spec = {.channels = 1, .format = SDL_AUDIO_S16, .freq = 44100};
 
-static void create_ball(int x, int y)
-{
-
-    pthread_mutex_lock(&mutex);
-    ball_idx = (ball_idx + 1) % NBR_BALLS;
-    ball_destroy(&balls[ball_idx]);
-    balls[ball_idx] = ball_create(x, y, 0, 0, current_frame);
-    pthread_mutex_unlock(&mutex);
-}
-
 static size_t calc_frame_size(const SDL_AudioSpec *spec)
 {
     return spec->channels * SDL_AUDIO_BYTESIZE(spec->format);
@@ -415,10 +401,6 @@ static void key_press(int key)
 
     oldest_voice->key = key;
     pthread_mutex_unlock(&mutex);
-    for (int i = 0; i < NBR_BALLS; i++)
-    {
-        create_ball(round(1.0 * i * WIDTH / NBR_BALLS), HEIGHT / 2);
-    }
 }
 
 static void key_release(int key)
@@ -603,12 +585,6 @@ static void draw_waveform(SDL_Renderer *renderer)
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         SDL_RenderLines(renderer, points, WIDTH / X_STEP);
 
-        for (int i = 0; i < NBR_BALLS; i++)
-        {
-            if (balls[i])
-                ball_draw(renderer, balls[i], points, current_frame);
-        }
-
         for (i = 0; (sqc = sqc_arr[i]); i++)
         {
             square_controller_draw(renderer, sqc);
@@ -761,7 +737,6 @@ int main(int argc, char **argv)
     fm_init(200, 200);
     delay_init(&input_spec, MAX_DELAY_MS);
     sequencer_init(note_change);
-    ball_init(WIDTH, HEIGHT, X_STEP);
 
     // MIDI STUFF
     snd_rawmidi_t *midi_in = midi_start();
@@ -904,7 +879,6 @@ int main(int argc, char **argv)
                 else
                     osc_click(event.button.x, event.button.y);
 
-                create_ball(event.button.x, event.button.y);
             }
             else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP)
             {
@@ -970,10 +944,6 @@ int main(int argc, char **argv)
     SDL_DestroyAudioStream(stream);
     SDL_CloseAudioDevice(devId);
 
-    for (int i = 0; i < NBR_BALLS; i++)
-        ball_destroy(&balls[i]);
-
-    free(buf);
 
     return 0;
 }
