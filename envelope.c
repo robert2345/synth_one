@@ -59,7 +59,7 @@ float envelope_get(struct env_state *state, float A, float D, float S, float R, 
         else
         {
             // attack
-            ret_level = (1.0 * (frame - state->start_frame)) / attack_frames;
+            ret_level = 0.001 + (0.999 * (frame - state->start_frame)) / attack_frames; // Avoiding 0, because I have hacked 0 envelope to turn off the note.
         }
     }
     else

@@ -187,6 +187,7 @@ static struct ctrl_param env_to_amp = {
     .value = 1.0,
     .min = 0,
     .max = 1.0,
+    .quantized_to_int = true,
 };
 
 static struct ctrl_param delay_ms = {
@@ -413,7 +414,14 @@ static void key_release(int key)
         {
             if (voice->pressed < current_frame)
             {
-                envelope_release(&voice->env, current_frame);
+                if (env_to_amp.value > 0.5)
+                {
+                    envelope_release(&voice->env, current_frame);
+                }
+                else
+                {
+                    voice->key = 0;
+                }
                 voice->released = current_frame;
                 voice->pressed = INT64_MAX;
                 pthread_mutex_unlock(&mutex);
@@ -451,9 +459,13 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
             }
 
             // envelope
-            raw_sample = raw_sample * (1.0 - env_to_amp.value) +
-                         raw_sample * env_to_amp.value *
-                             envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame);
+            if (env_to_amp.value > 0.5)
+            {
+                raw_sample = raw_sample * envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame);
+            } else {
+                if (0.0 == envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame))
+			voice->key = 0;
+	    }
             // filter
             int cut_freq = min(17000, max(50, key_to_cutoff.value * key_to_freq[voice->key][0] + cutoff.value +
                                                   env_to_cutoff.value * envelope_get(&voice->env, A.value, D.value,
@@ -878,7 +890,6 @@ int main(int argc, char **argv)
                     fm_click(event.button.x, event.button.y);
                 else
                     osc_click(event.button.x, event.button.y);
-
             }
             else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP)
             {
@@ -943,7 +954,6 @@ int main(int argc, char **argv)
 
     SDL_DestroyAudioStream(stream);
     SDL_CloseAudioDevice(devId);
-
 
     return 0;
 }
