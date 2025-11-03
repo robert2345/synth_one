@@ -65,7 +65,7 @@ static float render_pulse(const long long current_frame, float *period_pos, cons
     *period_pos += freq / spec->freq;
     if (*period_pos > 1.0)
     {
-        *period_pos = 0.0;
+        *period_pos -=1.0;
     }
 
     if (*period_pos > width)
@@ -79,7 +79,7 @@ static float render_saw(const long long current_frame, float *period_pos, const 
     *period_pos += freq / spec->freq;
     if (*period_pos > 1.0)
     {
-        *period_pos = 0.0;
+        *period_pos -=1.0;
     }
 
     return -1.0 + 2.0 * *period_pos;
