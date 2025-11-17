@@ -183,7 +183,7 @@ void fm_init(int x_in, int y_in)
             {
                 ops[j + OP_PARAM_NBR_OF * i] = ops[j];
             }
-            ops[j + OP_PARAM_NBR_OF * i].label[2] = '0' + i;
+            ops[j + OP_PARAM_NBR_OF * i].label[2] = '1' + i;
         }
 
         ops_param_groups[i] = (struct ctrl_param_group){
