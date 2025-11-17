@@ -219,31 +219,31 @@ static struct ctrl_param chorus_freq = {
 };
 
 static struct ctrl_param_group tone_ctrls = {
-    .params = {&amplitude, &osc_type, &octave, &env_to_amp},
+    .params = {&amplitude, &osc_type, &octave, &env_to_amp, NULL},
 };
 
 static struct ctrl_param_group envelope_ctrls = {
-    .params = {&A, &D, &S, &R},
+    .params = {&A, &D, &S, &R, NULL},
 };
 
 static struct ctrl_param_group filter_ctrls = {
-    .params = {&cutoff, &resonance, &env_to_cutoff, &key_to_cutoff, &cutoff_lfo_freq, &cutoff_lfo_amp},
+    .params = {&cutoff, &resonance, &env_to_cutoff, &key_to_cutoff, &cutoff_lfo_freq, &cutoff_lfo_amp, NULL},
 };
 
 static struct ctrl_param_group dist_ctrls = {
-    .params = {&dist_level, &flip_level},
+    .params = {&dist_level, &flip_level, NULL},
 };
 
 static struct ctrl_param_group delay_ctrls = {
-    .params = {&delay_fb, &delay_ms},
+    .params = {&delay_fb, &delay_ms, NULL},
 };
 
 static struct ctrl_param_group chorus_ctrls = {
-    .params = {&chorus_amount, &chorus_freq},
+    .params = {&chorus_amount, &chorus_freq, NULL},
 };
 
-struct ctrl_param_group *param_groups[MAX_GROUPS] = {&tone_ctrls, &envelope_ctrls, &filter_ctrls,
-                                                     &dist_ctrls, &delay_ctrls,    &chorus_ctrls};
+struct ctrl_param_group *param_groups[MAX_GROUPS] = {&tone_ctrls,  &envelope_ctrls, &filter_ctrls, &dist_ctrls,
+                                                     &delay_ctrls, &chorus_ctrls,   NULL};
 
 static struct square_controller *sqc_arr[5] = {};
 static struct slide_controller *slc_arr[MAX_PARAMS_PER_GROUP * MAX_GROUPS] = {};
@@ -462,10 +462,12 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
             if (env_to_amp.value > 0.5)
             {
                 raw_sample = raw_sample * envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame);
-            } else {
+            }
+            else
+            {
                 if (0.0 == envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame))
-			voice->key = 0;
-	    }
+                    voice->key = 0;
+            }
             // filter
             int cut_freq = min(17000, max(50, key_to_cutoff.value * key_to_freq[voice->key][0] + cutoff.value +
                                                   env_to_cutoff.value * envelope_get(&voice->env, A.value, D.value,
@@ -716,7 +718,9 @@ int main(int argc, char **argv)
 
     pthread_mutex_lock(&mutex);
     {
-        int i, j, k = 0;
+        int i = 0;
+        int j = 0;
+        int k = 0;
         struct ctrl_param_group *pg;
         struct ctrl_param *p;
         const int margin = 10;
