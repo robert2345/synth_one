@@ -122,12 +122,17 @@ struct algorithm algos[32] = {
              {.input_ops = {5}},
              {.input_ops = {6}},
              {.feedback_op = 6},
-         }},
-    {.nbr_carriers = 1,
-     .carriers = {1},
+         }
+    },
+    {.nbr_carriers = 2,
+     .carriers = {1, 3},
      .ops =
          {
-             {.input_ops = {}}, // carrier
+             {.input_ops = {2}}, // carrier
+             {.input_ops = {0}, .feedback_op = 2},
+             {.input_ops = {4}}, // carrier
+             {.input_ops = {5}},
+             {.input_ops = {6}},
          }},
 };
 
