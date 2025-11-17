@@ -133,7 +133,20 @@ struct algorithm algos[32] = {
              {.input_ops = {4}}, // carrier
              {.input_ops = {5}},
              {.input_ops = {6}},
-         }},
+         }
+    },
+    {.nbr_carriers = 2,
+     .carriers = {1, 4},
+     .ops =
+         {
+             {.input_ops = {2}}, // carrier
+             {.input_ops = {3}},
+             {.input_ops = {0}},
+             {.input_ops = {5}}, // carrier
+             {.input_ops = {6}},
+             {.feedback_op = 6},
+         }
+    },
 };
 
 float evaluate_operator(struct algorithm *algo, int op, float freq, float time)

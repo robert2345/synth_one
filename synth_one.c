@@ -415,7 +415,6 @@ static void voice_off(struct voice *voice)
         voice->key = 0;
     }
     voice->released = current_frame;
-    voice->pressed = INT64_MAX;
 }
 
 static void key_release(int key)
@@ -426,7 +425,7 @@ static void key_release(int key)
         struct voice *voice = &voices[i];
         if (voice->key == key)
         {
-            if (voice->pressed < current_frame)
+            if (voice->released > current_frame)
             {
                 voice_off(voice);
                 pthread_mutex_unlock(&mutex);
@@ -449,7 +448,7 @@ static void notes_off()
     for (int i = 0; i < NBR_VOICES; i++)
     {
         struct voice *voice = &voices[i];
-        if (voice->pressed < current_frame)
+        if (voice->released > current_frame)
         {
             voice_off(voice);
         }
@@ -469,7 +468,7 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
             float freq = key_to_freq[voice->key][0];
             if (osc_type.value == OSC_TYPE_FM)
             {
-                raw_sample = amplitude.value * fm_render_sample(current_frame, spec, freq);
+                raw_sample = amplitude.value * fm_render_sample(current_frame - voice->pressed, spec, freq);
             }
             else
             {
