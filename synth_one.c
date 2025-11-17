@@ -404,6 +404,20 @@ static void key_press(int key)
     pthread_mutex_unlock(&mutex);
 }
 
+static void voice_off(struct voice *voice)
+{
+    if (env_to_amp.value > 0.5)
+    {
+        envelope_release(&voice->env, current_frame);
+    }
+    else
+    {
+        voice->key = 0;
+    }
+    voice->released = current_frame;
+    voice->pressed = INT64_MAX;
+}
+
 static void key_release(int key)
 {
     pthread_mutex_lock(&mutex);
@@ -414,16 +428,7 @@ static void key_release(int key)
         {
             if (voice->pressed < current_frame)
             {
-                if (env_to_amp.value > 0.5)
-                {
-                    envelope_release(&voice->env, current_frame);
-                }
-                else
-                {
-                    voice->key = 0;
-                }
-                voice->released = current_frame;
-                voice->pressed = INT64_MAX;
+                voice_off(voice);
                 pthread_mutex_unlock(&mutex);
                 return;
             }
@@ -437,6 +442,20 @@ static void note_change(int key_on, int key_off)
     key_release(key_off);
     key_press(key_on);
 };
+
+static void notes_off()
+{
+    pthread_mutex_lock(&mutex);
+    for (int i = 0; i < NBR_VOICES; i++)
+    {
+        struct voice *voice = &voices[i];
+        if (voice->pressed < current_frame)
+        {
+            voice_off(voice);
+        }
+    }
+    pthread_mutex_unlock(&mutex);
+}
 
 static float render_sample(const long long current_frame, const SDL_AudioSpec *spec)
 {
@@ -849,6 +868,7 @@ int main(int argc, char **argv)
                 {
                 case SDL_SCANCODE_SPACE:
                     sequencer_toggle_run();
+                    notes_off();
                     break;
                 case SDL_SCANCODE_ESCAPE:
                     sequencer_toggle_edit();
