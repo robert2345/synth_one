@@ -34,6 +34,13 @@ static struct ctrl_param algorithm = {
     .quantized_to_int = true,
 };
 
+static struct ctrl_param mod_param = {
+    .label = "MODULATION",
+    .value = 1.0,
+    .min = 0.5,
+    .max = 10.0,
+};
+
 static const struct ctrl_param op_amp = {
     .label = "OPX AMP",
     .value = 0.01,
@@ -44,7 +51,7 @@ static const struct ctrl_param op_amp = {
 static const struct ctrl_param op_freq = {
     .label = "OPX FREQ",
     .value = 0.01,
-    .min = 0.001,
+    .min = 1,
     .max = 2.0,
 };
 
@@ -86,7 +93,7 @@ static struct ctrl_param ops[2 * OP_PARAM_NBR_OF * NBR_OPS + 1] = {
 };
 
 static struct ctrl_param_group algorithm_group = {
-    .params = {&algorithm},
+    .params = {&algorithm, &mod_param},
 };
 
 static struct ctrl_param_group ops_param_groups[MAX_GROUPS];
@@ -156,16 +163,16 @@ float evaluate_operator(struct algorithm *algo, int op, float freq, float time)
 
     for (int i = 0; 0 != op_p->input_ops[i]; i++)
     {
-        modulation += 0.1 * evaluate_operator(algo, op_p->input_ops[i], freq, time);
+        modulation += mod_param.value * evaluate_operator(algo, op_p->input_ops[i], freq, time);
     }
     if (op_p->feedback_op)
     {
         struct operator* feedback_op_p = & algo->ops[op_p->feedback_op - 1];
-        modulation += 0.1 * feedback_op_p->last_value;
+        modulation += mod_param.value * feedback_op_p->last_value;
     }
 
     op_p->last_value =
-        (get_op(op, OP_PARAM_AMP) * cos((freq + get_op(op, OP_PARAM_FREQ) + modulation) * 2 * M_PI * time));
+        (get_op(op, OP_PARAM_AMP) * cos((freq * get_op(op, OP_PARAM_FREQ)) * 2 * M_PI * time + modulation));
     return op_p->last_value;
 }
 
