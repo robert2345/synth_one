@@ -70,19 +70,19 @@ static const struct ctrl_param op_A = {
 };
 static const struct ctrl_param op_D = {
     .label = "OPX D",
-    .value = 0.01,
+    .value = 0.1,
     .min = 0.001,
     .max = 2.0,
 };
 static const struct ctrl_param op_S = {
     .label = "OPX S",
-    .value = 0.01,
+    .value = 0.2,
     .min = 0.001,
     .max = 2.0,
 };
 static const struct ctrl_param op_R = {
     .label = "OPX R",
-    .value = 0.01,
+    .value = 0.100,
     .min = 0.001,
     .max = 2.0,
 };
@@ -154,16 +154,23 @@ struct algorithm algos[32] = {
              {.feedback_op = 6},
          }
     },
+    {.nbr_carriers = 1,
+     .carriers = {1},
+     .ops =
+         {
+             {.input_ops = {0}}, // carrier
+         }
+    },
 };
 
-float evaluate_operator(struct algorithm *algo, int op, float freq, float time)
+float evaluate_operator(struct algorithm *algo, int op, float freq, double on_time, double release_time)
 {
     float modulation = 0;
     struct operator* op_p = & algo->ops[op - 1];
 
     for (int i = 0; 0 != op_p->input_ops[i]; i++)
     {
-        modulation += mod_param.value * evaluate_operator(algo, op_p->input_ops[i], freq, time);
+        modulation += mod_param.value * evaluate_operator(algo, op_p->input_ops[i], freq, on_time, release_time);
     }
     if (op_p->feedback_op)
     {
@@ -171,20 +178,32 @@ float evaluate_operator(struct algorithm *algo, int op, float freq, float time)
         modulation += mod_param.value * feedback_op_p->last_value;
     }
 
-    op_p->last_value =
-        (get_op(op, OP_PARAM_AMP) * cos((freq * get_op(op, OP_PARAM_FREQ)) * 2 * M_PI * time + modulation));
+    float env = envelope_get_stateless(
+		    get_op(op, OP_PARAM_A),
+		    get_op(op, OP_PARAM_D),
+		    get_op(op, OP_PARAM_S),
+		    get_op(op, OP_PARAM_R),
+		    on_time,
+		    release_time);
+//printf("op %d Env : %f %f %f\n", op, env,
+//on_time, release_time);
+
+    op_p->last_value =  env *
+        (get_op(op, OP_PARAM_AMP) *
+	 cos((freq * get_op(op, OP_PARAM_FREQ)) * 2 * M_PI * on_time + modulation));
     return op_p->last_value;
 }
 
-float fm_render_sample(long long current_frame, const SDL_AudioSpec *spec, float freq)
+float fm_render_sample(int frame_since_on, int frame_since_release, const SDL_AudioSpec *spec, float freq)
 {
     float data = 0;
-    float time = current_frame * 1.0 / spec->freq;
+    double on_time = frame_since_on * 1.0 / spec->freq;
+    double release_time = frame_since_release * 1.0 / spec->freq;
 
     struct algorithm *algo = &algos[(int)algorithm.value];
     for (int i = 0; i < algo->nbr_carriers; i++)
     {
-        data += evaluate_operator(algo, algo->carriers[i], freq, time) / algo->nbr_carriers;
+        data += evaluate_operator(algo, algo->carriers[i], freq, on_time, release_time) / algo->nbr_carriers;
     }
 
     return data;

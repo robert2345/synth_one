@@ -14,3 +14,4 @@ void envelope_init(struct env_state *state, SDL_AudioSpec *spec);
 void envelope_start(struct env_state *state, long long frame);
 float envelope_get(struct env_state *state, float A, float D, float S, float R, long long frame);
 void envelope_release(struct env_state *state, long long frame);
+float envelope_get_stateless(float A, float D, float S, float R, double on_time, double release_time);

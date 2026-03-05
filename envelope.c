@@ -29,6 +29,50 @@ void envelope_release(struct env_state *state, long long frame)
     state->release_frame = frame;
 }
 
+float envelope_get_stateless(float A, float D, float S, float R, double on_time, double release_time)
+{
+
+    int decay_s = D;
+    float sustain_value = S;
+
+    float ret_level;
+
+    double attack_s = A;
+    double decay_start_s = attack_s;
+    double sustain_start = attack_s + decay_s;
+
+    if(release_time < 0)
+    {
+	    printf("Less than 0 time since release makes no sense in this function!");
+	    exit(-1);
+    }
+
+    on_time -= release_time; // if the note has been released, on_time at the time of the release to calculate the initial level of the release ramp
+    if (on_time > sustain_start)
+    {
+	    ret_level = sustain_value;
+    }
+    else if (on_time > decay_start_s)
+    {
+	    // decay
+	    ret_level = (1.0 - ((1.0 - sustain_value) * (on_time - decay_start_s)) / decay_s);
+    }
+    else
+    {
+	    // attack
+	    ret_level = 0.001 + (0.999 * (on_time)) / attack_s; // Avoiding 0, because I have hacked 0 envelope to turn off the note.
+    }
+
+    if (release_time > 0) // note has been released 
+    {
+        // Release
+	double release_s = R;
+        return max(0.0, ret_level * (1.0 - release_time / (release_s)));
+    }
+
+    return ret_level;
+}
+
 float envelope_get(struct env_state *state, float A, float D, float S, float R, long long frame)
 {
 

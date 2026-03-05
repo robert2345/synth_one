@@ -9,6 +9,8 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+#set(CMAKE_BUILD_TYPE Debug)
+
 # This assumes the SDL source is available in ./SDL
 add_subdirectory(SDL EXCLUDE_FROM_ALL)
 
