@@ -37,21 +37,28 @@ static struct ctrl_param algorithm = {
 static struct ctrl_param mod_param = {
     .label = "MODULATION",
     .value = 1.0,
-    .min = 0.5,
+    .min = 0.0,
+    .max = 10.0,
+};
+
+static struct ctrl_param fb_param = {
+    .label = "FEEDBACK",
+    .value = 0.99,
+    .min = 0.0,
     .max = 10.0,
 };
 
 static const struct ctrl_param op_amp = {
     .label = "OPX AMP",
-    .value = 0.01,
-    .min = 0.001,
+    .value = 0.001,
+    .min = 0.000,
     .max = 0.1,
 };
 
 static const struct ctrl_param op_freq = {
     .label = "OPX FREQ",
-    .value = 0.01,
-    .min = 1,
+    .value = 1,
+    .min = 0.5,
     .max = 2.0,
 };
 
@@ -64,25 +71,25 @@ static const struct ctrl_param op_detune = {
 
 static const struct ctrl_param op_A = {
     .label = "OPX A",
-    .value = 0.01,
+    .value = 0.001,
     .min = 0.001,
     .max = 2.0,
 };
 static const struct ctrl_param op_D = {
     .label = "OPX D",
-    .value = 0.1,
+    .value = 0.001,
     .min = 0.001,
     .max = 2.0,
 };
 static const struct ctrl_param op_S = {
     .label = "OPX S",
-    .value = 0.2,
-    .min = 0.001,
+    .value = 0.0,
+    .min = 0.000,
     .max = 2.0,
 };
 static const struct ctrl_param op_R = {
     .label = "OPX R",
-    .value = 0.100,
+    .value = 0.01,
     .min = 0.001,
     .max = 2.0,
 };
@@ -93,7 +100,7 @@ static struct ctrl_param ops[2 * OP_PARAM_NBR_OF * NBR_OPS + 1] = {
 };
 
 static struct ctrl_param_group algorithm_group = {
-    .params = {&algorithm, &mod_param},
+    .params = {&algorithm, &mod_param, &fb_param},
 };
 
 static struct ctrl_param_group ops_param_groups[MAX_GROUPS];
@@ -158,7 +165,7 @@ struct algorithm algos[32] = {
      .carriers = {1},
      .ops =
          {
-             {.input_ops = {0}}, // carrier
+             {.input_ops = {0}, .feedback_op = 1}, // carrier
          }
     },
 };
@@ -185,12 +192,10 @@ float evaluate_operator(struct algorithm *algo, int op, float freq, double on_ti
 		    get_op(op, OP_PARAM_R),
 		    on_time,
 		    release_time);
-//printf("op %d Env : %f %f %f\n", op, env,
-//on_time, release_time);
 
     op_p->last_value =  env *
         (get_op(op, OP_PARAM_AMP) *
-	 cos((freq * get_op(op, OP_PARAM_FREQ)) * 2 * M_PI * on_time + modulation));
+	 cos(modulation + (freq * get_op(op, OP_PARAM_FREQ)) * 2 * M_PI * on_time));
     return op_p->last_value;
 }
 
