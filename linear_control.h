@@ -10,6 +10,7 @@ struct linear_control
     float max;
     float min;
     bool quantized_to_int;
+    bool show_num;
 };
 
 struct ctrl_param
@@ -19,6 +20,7 @@ struct ctrl_param
     float min;
     float max;
     bool quantized_to_int;
+    bool show_num;
 };
 
 struct ctrl_param_group

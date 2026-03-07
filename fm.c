@@ -32,6 +32,7 @@ static struct ctrl_param algorithm = {
     .min = 0,
     .max = 5,
     .quantized_to_int = true,
+    .show_num = true,
 };
 
 static struct ctrl_param mod_param = {
@@ -60,6 +61,7 @@ static const struct ctrl_param op_freq = {
     .value = 1,
     .min = 0.5,
     .max = 2.0,
+    .show_num = true,
 };
 
 static const struct ctrl_param op_detune = {
@@ -263,7 +265,7 @@ void fm_init(int x_in, int y_in)
                 x = x_in + margin + (y + y_in) / (HEIGHT - tot_height) * (width + margin);
                 slc_arr[k++] = slide_controller_create(
                     x, (y + y_in) % (HEIGHT - tot_height), width, height,
-                    (struct linear_control){&p->value, p->min, p->max, p->quantized_to_int}, p->label);
+                    (struct linear_control){&p->value, p->min, p->max, p->quantized_to_int, p->show_num}, p->label);
                 y += (margin + height + label_height);
             }
             y += 3 * margin;

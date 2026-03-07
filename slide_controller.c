@@ -1,5 +1,6 @@
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "slide_controller.h"
 #include "text.h"
@@ -94,12 +95,34 @@ void slide_controller_unclick(struct slide_controller *sc)
 
 void slide_controller_draw(SDL_Renderer *renderer, struct slide_controller *sc)
 {
+#define VAL_SIZE 10
+    char val_text[VAL_SIZE+1];
+    int label_len = strlen(sc->label);
+    if (sc->control.show_num) {
+	    int n = 0;
+	    if (sc->control.quantized_to_int)
+		    n = snprintf(val_text, VAL_SIZE,"%-.f", *sc->control.target);
+	    else
+		    n = snprintf(val_text, VAL_SIZE,"%-.2f", *sc->control.target);
+	    if (n > VAL_SIZE)
+		    fprintf(stderr, "Value label too small!\n");
+    }
 
-    if (sc->width > sc->height)
+    if (sc->width > sc->height) {
         text_draw(renderer, sc->label, sc->x, sc->y + sc->height, false);
-    else
-
+	if (sc->control.show_num)
+	{
+		text_draw(renderer, val_text, sc->x+(label_len+1)*text_get_width(), sc->y+sc->height, false);
+	}
+    }
+    else{
         text_draw(renderer, sc->label, sc->x + sc->width, sc->y + sc->height, true);
+	if (sc->control.show_num)
+	{
+		text_draw(renderer, val_text, sc->x, sc->y+(label_len+1)*text_get_height()+sc->height, false);
+	}
+    }
+
 
     SDL_SetRenderDrawColor(renderer, 0, 50, 150, 255);
     SDL_RenderLines(renderer, sc->border_points, 5);
