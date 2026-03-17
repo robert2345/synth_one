@@ -1,14 +1,15 @@
 #pragma once
 
-struct filter_state {
-float v2;
-float g;
-float v1;
-float ic2eq;
-float ic1eq;
-float a2;
-float a1;
-float cutoff;
+struct filter_state
+{
+    float v2;
+    float g;
+    float v1;
+    float ic2eq;
+    float ic1eq;
+    float a2;
+    float a1;
+    float cutoff;
 };
 
 void low_pass_filter_init(struct filter_state *state, float res, float cutoff, int sample_rate);

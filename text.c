@@ -11,13 +11,13 @@ static const int text_width = 8;
 int text_get_height()
 {
 
-	return text_height;
+    return text_height;
 }
 
 int text_get_width()
 {
 
-	return text_width;
+    return text_width;
 }
 
 void text_init(SDL_Renderer *renderer)
@@ -49,14 +49,15 @@ void text_draw(SDL_Renderer *renderer, const char *text, int x, int y, bool vert
 
     if (vertical)
     {
-    dstrect.w = text_width;
-    dstrect.h = text_height;
+        dstrect.w = text_width;
+        dstrect.h = text_height;
         for (i = 0; (c = text[i]); i++)
         {
             // Source image is a representation of ascii chars from 32 and up, 32 per "line".
             srcrect.x = text_width * (c % 32);
             srcrect.y = text_height * (c / 32 - 1);
-            if (!SDL_RenderTextureRotated(renderer, text_texture, &srcrect, &dstrect, -90,&(SDL_FPoint){}, SDL_FLIP_NONE))
+            if (!SDL_RenderTextureRotated(renderer, text_texture, &srcrect, &dstrect, -90, &(SDL_FPoint){},
+                                          SDL_FLIP_NONE))
                 printf("Failed to render text!\n");
             dstrect.y -= text_width;
         }

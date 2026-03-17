@@ -41,32 +41,34 @@ float envelope_get_stateless(float A, float D, float S, float R, double on_time,
     double decay_start_s = attack_s;
     double sustain_start = attack_s + decay_s;
 
-    if(release_time < 0)
+    if (release_time < 0)
     {
-	    printf("Less than 0 time since release makes no sense in this function!");
-	    exit(-1);
+        printf("Less than 0 time since release makes no sense in this function!");
+        exit(-1);
     }
 
-    on_time -= release_time; // if the note has been released, on_time at the time of the release to calculate the initial level of the release ramp
+    on_time -= release_time; // if the note has been released, on_time at the time of the release to calculate the
+                             // initial level of the release ramp
     if (on_time > sustain_start)
     {
-	    ret_level = sustain_value;
+        ret_level = sustain_value;
     }
     else if (on_time > decay_start_s)
     {
-	    // decay
-	    ret_level = (1.0 - ((1.0 - sustain_value) * (on_time - decay_start_s)) / decay_s);
+        // decay
+        ret_level = (1.0 - ((1.0 - sustain_value) * (on_time - decay_start_s)) / decay_s);
     }
     else
     {
-	    // attack
-	    ret_level = 0.001 + (0.999 * (on_time)) / attack_s; // Avoiding 0, because I have hacked 0 envelope to turn off the note.
+        // attack
+        ret_level = 0.001 + (0.999 * (on_time)) /
+                                attack_s; // Avoiding 0, because I have hacked 0 envelope to turn off the note.
     }
 
-    if (release_time > 0) // note has been released 
+    if (release_time > 0) // note has been released
     {
         // Release
-	double release_s = R;
+        double release_s = R;
         return max(0.0, ret_level * (1.0 - release_time / (release_s)));
     }
 
@@ -103,7 +105,8 @@ float envelope_get(struct env_state *state, float A, float D, float S, float R, 
         else
         {
             // attack
-            ret_level = 0.001 + (0.999 * (frame - state->start_frame)) / attack_frames; // Avoiding 0, because I have hacked 0 envelope to turn off the note.
+            ret_level = 0.001 + (0.999 * (frame - state->start_frame)) /
+                                    attack_frames; // Avoiding 0, because I have hacked 0 envelope to turn off the note.
         }
     }
     else

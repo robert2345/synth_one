@@ -138,8 +138,7 @@ struct algorithm algos[32] = {
              {.input_ops = {5}},
              {.input_ops = {6}},
              {.feedback_op = 6},
-         }
-    },
+         }},
     {.nbr_carriers = 2,
      .carriers = {1, 3},
      .ops =
@@ -149,8 +148,7 @@ struct algorithm algos[32] = {
              {.input_ops = {4}}, // carrier
              {.input_ops = {5}},
              {.input_ops = {6}},
-         }
-    },
+         }},
     {.nbr_carriers = 2,
      .carriers = {1, 4},
      .ops =
@@ -161,15 +159,13 @@ struct algorithm algos[32] = {
              {.input_ops = {5}}, // carrier
              {.input_ops = {6}},
              {.feedback_op = 6},
-         }
-    },
+         }},
     {.nbr_carriers = 1,
      .carriers = {1},
      .ops =
          {
              {.input_ops = {0}, .feedback_op = 1}, // carrier
-         }
-    },
+         }},
 };
 
 float evaluate_operator(struct algorithm *algo, int op, float freq, double on_time, double release_time)
@@ -187,17 +183,11 @@ float evaluate_operator(struct algorithm *algo, int op, float freq, double on_ti
         modulation += mod_param.value * feedback_op_p->last_value;
     }
 
-    float env = envelope_get_stateless(
-		    get_op(op, OP_PARAM_A),
-		    get_op(op, OP_PARAM_D),
-		    get_op(op, OP_PARAM_S),
-		    get_op(op, OP_PARAM_R),
-		    on_time,
-		    release_time);
+    float env = envelope_get_stateless(get_op(op, OP_PARAM_A), get_op(op, OP_PARAM_D), get_op(op, OP_PARAM_S),
+                                       get_op(op, OP_PARAM_R), on_time, release_time);
 
-    op_p->last_value =  env *
-        (get_op(op, OP_PARAM_AMP) *
-	 cos(modulation + (freq * get_op(op, OP_PARAM_FREQ)) * 2 * M_PI * on_time));
+    op_p->last_value =
+        env * (get_op(op, OP_PARAM_AMP) * cos(modulation + (freq * get_op(op, OP_PARAM_FREQ)) * 2 * M_PI * on_time));
     return op_p->last_value;
 }
 

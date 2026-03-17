@@ -468,12 +468,12 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
             float freq = key_to_freq[voice->key][0];
             if (osc_type.value == OSC_TYPE_FM)
             {
-		// non released not is INT64_MAX cause it was a suitable value here, but 0 makes more sense in the fm rendering
-                raw_sample = amplitude.value *
-			fm_render_sample(current_frame - voice->pressed,
-				voice->released == INT64_MAX ? 0 : (current_frame - voice->released),
-				spec,
-				freq);
+                // non released not is INT64_MAX cause it was a suitable value here, but 0 makes more sense in the fm
+                // rendering
+                raw_sample =
+                    amplitude.value *
+                    fm_render_sample(current_frame - voice->pressed,
+                                     voice->released == INT64_MAX ? 0 : (current_frame - voice->released), spec, freq);
             }
             else
             {
