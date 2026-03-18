@@ -500,12 +500,11 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
                                                   cutoff_lfo_amp.value * cosine_render_sample(current_frame, spec,
                                                                                               cutoff_lfo_freq.value)));
             low_pass_filter_configure(&voice->filter, cut_freq, resonance.value, spec->freq);
-            sample += low_pass_filter_get_output(&voice->filter, raw_sample);
+            raw_sample = low_pass_filter_get_output(&voice->filter, raw_sample);
+            // distort
+            sample += distort(raw_sample, dist_level.value, flip_level.value);
         }
     }
-
-    // distort
-    sample = distort(sample, dist_level.value, flip_level.value);
 
     // echo
     sample += delay_fb.value * delay_get_sample(delay_ms.value, spec);
