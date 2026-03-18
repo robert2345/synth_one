@@ -267,6 +267,8 @@ static long long current_frame = 0;
 static int sample_frames;
 static int buffer_frames;
 static size_t frame_size;
+static int fill_target;
+static int num_frames_to_gen_in_one_go;
 static const SDL_AudioSpec input_spec = {.channels = 1, .format = SDL_AUDIO_S16, .freq = 44100};
 
 static size_t calc_frame_size(const SDL_AudioSpec *spec)
@@ -580,7 +582,13 @@ static void fill_audio_buffer(union sigval)
     pthread_mutex_lock(&mutex);
     // check how much is in buffer
     // render rest
-    int frames = sample_frames - calc_frames_queued(stream, &input_spec);
+    int frames_queued = calc_frames_queued(stream, &input_spec);
+    if (frames_queued == 0)
+    {
+        fill_target += 10;
+        printf("fill target %d Nothing in queueu!\n", fill_target);
+    }
+    int frames = fill_target - frames_queued;
     frames = min(frames, buffer_frames);
     if (frames > 0)
     {
@@ -662,7 +670,8 @@ static void sig_handler(int signum)
 static int setup_audio_timer(timer_t *t)
 {
     struct sigevent sevnt = {.sigev_notify = SIGEV_THREAD, .sigev_notify_function = fill_audio_buffer};
-    struct itimerspec new_value = {.it_interval = {.tv_nsec = buffer_frames / 2 * 1000000000ull / input_spec.freq}};
+    struct itimerspec new_value = {
+        .it_interval = {.tv_nsec = num_frames_to_gen_in_one_go * 1000000000ull / input_spec.freq}};
     new_value.it_value = new_value.it_interval;
 
     int ret = timer_create(CLOCK_MONOTONIC, &sevnt, t);
@@ -819,7 +828,9 @@ int main(int argc, char **argv)
         pr_sdl_err();
         return 3;
     }
-    buffer_frames = sample_frames / 2;
+    buffer_frames = sample_frames * 2;
+    fill_target = sample_frames;
+    num_frames_to_gen_in_one_go = sample_frames / 8;
     frame_size = calc_frame_size(&input_spec);
     printf("Frame size %ld\n", frame_size);
     buf = malloc(buffer_frames * frame_size);
