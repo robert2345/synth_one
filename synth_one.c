@@ -966,6 +966,10 @@ int main(int argc, char **argv)
                 else
                     osc_move(event.motion.x, event.motion.y);
             }
+	    else if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
+		    synth_abort = true;
+	    }
+
         }
 
         struct midi_message msg;
