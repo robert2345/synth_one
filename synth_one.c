@@ -113,7 +113,7 @@ static struct ctrl_param key_to_cutoff = {
     .label = "KEY TO CUTOFF",
     .value = 0.0,
     .min = 0.0,
-    .max = 1.0,
+    .max = 100.0,
 };
 
 static struct ctrl_param cutoff_lfo_freq = {
@@ -495,8 +495,8 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
             }
             // filter
             int cut_freq = min(17000, max(50, key_to_cutoff.value * key_to_freq[voice->key][0] + cutoff.value +
-                                                  env_to_cutoff.value * envelope_get(&voice->env, A.value, D.value,
-                                                                                     S.value, R.value, current_frame) +
+                                                  env_to_cutoff.value * (envelope_get(&voice->env, A.value, D.value,
+                                                                                     S.value, R.value, current_frame)-S.value) +
                                                   cutoff_lfo_amp.value * cosine_render_sample(current_frame, spec,
                                                                                               cutoff_lfo_freq.value)));
             low_pass_filter_configure(&voice->filter, cut_freq, resonance.value, spec->freq);
