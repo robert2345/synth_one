@@ -980,7 +980,6 @@ int main(int argc, char **argv)
                 key_release(msg.note.key);
             }
         }
-        usleep(750);
     }
 
     save_settings();
