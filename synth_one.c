@@ -781,7 +781,7 @@ int main(int argc, char **argv)
         return res;
 
     // initialization of sub modules
-    fm_init(200, 200);
+    fm_init(200, 200, 800, 600);
     delay_init(&input_spec, MAX_DELAY_MS);
     sequencer_init(note_change);
 

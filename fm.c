@@ -206,7 +206,36 @@ float fm_render_sample(int frame_since_on, int frame_since_release, const SDL_Au
     return data;
 }
 
-void fm_init(int x_in, int y_in)
+void fm_relocate(int x_in, int y_in, int width, int height)
+{
+    int i = 0;
+    int j = 0;
+    int k = 0;
+    struct ctrl_param_group *pg;
+    struct ctrl_param *p;
+    const int margin = 10;
+    const int ctrl_width = 100;
+    const int ctrl_height = 10;
+    int label_height = text_get_height();
+    int tot_height = ctrl_height + label_height;
+    int x = margin;
+    int y = margin;
+    while ((pg = param_groups[i++]))
+    {
+        j = 0;
+        while ((p = pg->params[j++]))
+        {
+            x = x_in + margin + (y + y_in) / (height - tot_height) * (ctrl_width + margin);
+            slc_arr[k++] = slide_controller_create(
+                x, (y + y_in) % (height - tot_height), ctrl_width, ctrl_height,
+                (struct linear_control){&p->value, p->min, p->max, p->quantized_to_int, p->show_num}, p->label);
+            y += (margin + ctrl_height + label_height);
+        }
+        y += 3 * margin;
+    }
+}
+
+void fm_init(int x_in, int y_in, int width, int height)
 {
     int i, j = 0;
 
@@ -233,8 +262,6 @@ void fm_init(int x_in, int y_in)
 
     // Initialize all the actual controllers
     {
-#define WIDTH (1024)
-#define HEIGHT (768)
         int i = 0;
         int j = 0;
         int k = 0;
@@ -252,15 +279,13 @@ void fm_init(int x_in, int y_in)
             j = 0;
             while ((p = pg->params[j++]))
             {
-                x = x_in + margin + (y + y_in) / (HEIGHT - tot_height) * (width + margin);
                 slc_arr[k++] = slide_controller_create(
-                    x, (y + y_in) % (HEIGHT - tot_height), width, height,
+                    0, 0, width, height,
                     (struct linear_control){&p->value, p->min, p->max, p->quantized_to_int, p->show_num}, p->label);
-                y += (margin + height + label_height);
             }
-            y += 3 * margin;
         }
     }
+    fm_relocate(x_in, y_in, width, height);
 }
 
 #define OP_START_X 600
