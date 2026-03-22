@@ -12,8 +12,6 @@
 #define MIN_WIDTH (0.01)
 #define MAX_GROUPS (3)
 
-static bool initialized = false;
-
 static struct slide_controller *slc_arr[MAX_PARAMS_PER_GROUP * MAX_GROUPS] = {};
 
 static struct ctrl_param base_width = {
@@ -106,10 +104,13 @@ float osc_render_sample(long long current_frame, struct osc_state *state, const 
     return sample;
 }
 
-void osc_draw(SDL_Renderer *renderer)
+void osc_draw(struct osc_state *state, SDL_Renderer *renderer)
 {
     int i;
     struct slide_controller *slc;
+
+    SDL_SetRenderDrawColor(renderer, 200, 100, 200, 00);
+    SDL_RenderRect(renderer, &state->location);
 
     for (i = 0; (slc = slc_arr[i]); i++)
     {
@@ -147,7 +148,40 @@ void osc_move(int x, int y)
     }
 }
 
-void osc_init(struct osc_state *state, int x_in, int y_in)
+void osc_relocate(struct osc_state *state, int x_in, int y_in, int width, int height)
+{
+    state->location.x = x_in;
+    state->location.y = y_in;
+    state->location.w = width;
+    state->location.h = height;
+    int i = 0;
+    int j = 0;
+    int k = 0;
+    struct ctrl_param_group *pg;
+    struct ctrl_param *p;
+    const int margin = 10;
+    const int ctrl_width = 100;
+    const int ctrl_height = 10;
+    int label_height = text_get_height();
+    int tot_height = ctrl_height + label_height;
+    int x = margin;
+    int y = margin;
+    while ((pg = param_groups[i++]))
+    {
+        j = 0;
+        while ((p = pg->params[j++]))
+        {
+            struct slide_controller *slc = slc_arr[k++];
+            x = x_in + margin + (y + y_in) / (height - tot_height) * (ctrl_width + margin);
+            int y_to_set = y_in + y % (height - tot_height);
+            slide_controller_relocate(slc, x, y_to_set, ctrl_width, ctrl_height);
+            y += (margin + ctrl_height + label_height);
+        }
+        y += 3 * margin;
+    }
+}
+
+void osc_init(struct osc_state *state, int x_in, int y_in, int width, int height)
 {
     if (!state)
     {
@@ -158,35 +192,24 @@ void osc_init(struct osc_state *state, int x_in, int y_in)
         memset(state, 0, sizeof(*state));
     }
     // Initialize all the actual controllers
-    if (!initialized)
     {
-        initialized = true;
-#define WIDTH (1024)
-#define HEIGHT (768)
         int i = 0;
         int j = 0;
         int k = 0;
+        const int ctrl_width = 100;
+        const int ctrl_height = 10;
         struct ctrl_param_group *pg;
         struct ctrl_param *p;
-        const int margin = 10;
-        const int width = 100;
-        const int height = 10;
-        int label_height = text_get_height();
-        int tot_height = height + label_height;
-        int x = margin;
-        int y = margin;
         while ((pg = param_groups[i++]))
         {
             j = 0;
             while ((p = pg->params[j++]))
             {
-                x = x_in + margin + (y + y_in) / (HEIGHT - tot_height) * (width + margin);
                 slc_arr[k++] = slide_controller_create(
-                    x, (y + y_in) % (HEIGHT - tot_height), width, height,
-                    (struct linear_control){&p->value, p->min, p->max, p->quantized_to_int}, p->label);
-                y += (margin + height + label_height);
+                    0, 0, 100, 10, (struct linear_control){&p->value, p->min, p->max, p->quantized_to_int, p->show_num},
+                    p->label);
             }
-            y += 3 * margin;
         }
     }
+    osc_relocate(state, x_in, y_in, width, height);
 }

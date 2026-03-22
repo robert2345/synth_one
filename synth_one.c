@@ -41,7 +41,8 @@
 #define NBR_BALLS (20)
 
 static bool synth_abort = false;
-
+struct osc_state saw_state;
+struct osc_state pulse_state;
 static void pr_sdl_err()
 {
     fprintf(stderr, "%s", SDL_GetError());
@@ -55,7 +56,6 @@ struct voice
     long long pressed;
     struct env_state env;
     struct filter_state filter;
-    struct osc_state osc;
 };
 
 struct voice voices[NBR_VOICES] = {};
@@ -479,8 +479,17 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
             }
             else
             {
+                struct osc_state *state;
+                if (osc_type.value == OSC_TYPE_SAW)
+                {
+                    state = &saw_state;
+                }
+                else
+                {
+                    state = &pulse_state;
+                }
                 raw_sample =
-                    amplitude.value * osc_render_sample(current_frame, &voice->osc, spec, voice->key, osc_type.value);
+                    amplitude.value * osc_render_sample(current_frame, state, spec, voice->key, osc_type.value);
             }
 
             // envelope
@@ -648,8 +657,9 @@ static void draw_waveform(SDL_Renderer *renderer)
             fm_draw(renderer);
             break;
         case OSC_TYPE_PULSE:
+            osc_draw(&pulse_state, renderer);
         case OSC_TYPE_SAW:
-            osc_draw(renderer);
+            osc_draw(&saw_state, renderer);
             break;
         default:
             fprintf(stderr, "Invalid oscillator type\n");
@@ -784,6 +794,8 @@ int main(int argc, char **argv)
 
     // initialization of sub modules
     fm_init(200, 200, 800, 600);
+    osc_init(&saw_state, 200, 0, 800, 200);
+    osc_init(&pulse_state, 200, 0, 800, 200);
     delay_init(&input_spec, MAX_DELAY_MS);
     sequencer_init(note_change);
 
@@ -805,7 +817,6 @@ int main(int argc, char **argv)
         voices[i].pressed = 0;
         voices[i].released = 0;
 
-        osc_init(&voices[i].osc, 200, 200);
         envelope_init(&voices[i].env, &input_spec);
         low_pass_filter_init(&voices[i].filter, res, cutoff.value, input_spec.freq);
     }

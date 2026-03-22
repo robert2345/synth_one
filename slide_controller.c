@@ -37,6 +37,24 @@ static void linear_control_set(struct linear_control *lc, float setting)
     *lc->target = value;
 }
 
+void slide_controller_relocate(struct slide_controller *sc, int x, int y, int width, int height)
+{
+    sc->x = x;
+    sc->y = y;
+    sc->width = width;
+    sc->height = height;
+    sc->border_points[0].x = x;
+    sc->border_points[0].y = y;
+    sc->border_points[1].x = x + width;
+    sc->border_points[1].y = y;
+    sc->border_points[2].x = x + width;
+    sc->border_points[2].y = y + height;
+    sc->border_points[3].x = x;
+    sc->border_points[3].y = y + height;
+    sc->border_points[4].x = x;
+    sc->border_points[4].y = y;
+    slide_controller_set_pos_from_value(sc);
+}
 void slide_controller_set_pos_from_value(struct slide_controller *sc)
 {
     int mx, my;
@@ -139,27 +157,14 @@ struct slide_controller *slide_controller_create(int x, int y, int width, int he
     int text_margin = 16;
     int mx = 0;
     int my = 0;
-    sc->x = x;
-    sc->y = y;
-    sc->width = width;
-    sc->height = height;
     sc->control = control;
     sc->clicked = false;
     sc->label = label;
 
+    slide_controller_relocate(sc, x, y, width, height);
+
     // calculate initial marker position
     slide_controller_set_pos_from_value(sc);
-
-    sc->border_points[0].x = x;
-    sc->border_points[0].y = y;
-    sc->border_points[1].x = x + width;
-    sc->border_points[1].y = y;
-    sc->border_points[2].x = x + width;
-    sc->border_points[2].y = y + height;
-    sc->border_points[3].x = x;
-    sc->border_points[3].y = y + height;
-    sc->border_points[4].x = x;
-    sc->border_points[4].y = y;
 
     return sc;
 }

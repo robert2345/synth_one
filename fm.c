@@ -3,6 +3,7 @@
 #include "linear_control.h"
 #include "slide_controller.h"
 #include "text.h"
+#include "util.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,6 +22,8 @@ enum op_param
 
 #define NBR_OPS (8)
 #define MAX_GROUPS (NBR_OPS + 2) // choose algo and # operators.
+
+static SDL_FRect fm_location;
 
 static struct slide_controller *slc_arr[MAX_PARAMS_PER_GROUP * MAX_GROUPS] = {};
 
@@ -208,6 +211,10 @@ float fm_render_sample(int frame_since_on, int frame_since_release, const SDL_Au
 
 void fm_relocate(int x_in, int y_in, int width, int height)
 {
+    fm_location.x = x_in;
+    fm_location.y = y_in;
+    fm_location.w = width;
+    fm_location.h = height;
     int i = 0;
     int j = 0;
     int k = 0;
@@ -225,10 +232,10 @@ void fm_relocate(int x_in, int y_in, int width, int height)
         j = 0;
         while ((p = pg->params[j++]))
         {
+            struct slide_controller *slc = slc_arr[k++];
             x = x_in + margin + (y + y_in) / (height - tot_height) * (ctrl_width + margin);
-            slc_arr[k++] = slide_controller_create(
-                x, (y + y_in) % (height - tot_height), ctrl_width, ctrl_height,
-                (struct linear_control){&p->value, p->min, p->max, p->quantized_to_int, p->show_num}, p->label);
+            int y_to_set = y_in + y % (height - tot_height);
+            slide_controller_relocate(slc, x, y_to_set, ctrl_width, ctrl_height);
             y += (margin + ctrl_height + label_height);
         }
         y += 3 * margin;
@@ -265,23 +272,18 @@ void fm_init(int x_in, int y_in, int width, int height)
         int i = 0;
         int j = 0;
         int k = 0;
+        const int ctrl_width = 100;
+        const int ctrl_height = 10;
         struct ctrl_param_group *pg;
         struct ctrl_param *p;
-        const int margin = 10;
-        const int width = 100;
-        const int height = 10;
-        int label_height = text_get_height();
-        int tot_height = height + label_height;
-        int x = margin;
-        int y = margin;
         while ((pg = param_groups[i++]))
         {
             j = 0;
             while ((p = pg->params[j++]))
             {
                 slc_arr[k++] = slide_controller_create(
-                    0, 0, width, height,
-                    (struct linear_control){&p->value, p->min, p->max, p->quantized_to_int, p->show_num}, p->label);
+                    0, 0, 10, 10, (struct linear_control){&p->value, p->min, p->max, p->quantized_to_int, p->show_num},
+                    p->label);
             }
         }
     }
@@ -364,6 +366,9 @@ void fm_draw(SDL_Renderer *renderer)
 {
     int i;
     struct slide_controller *slc;
+
+    SDL_SetRenderDrawColor(renderer, 123, 234, 012, 123);
+    SDL_RenderRect(renderer, &fm_location);
 
     for (i = 0; (slc = slc_arr[i]); i++)
     {
