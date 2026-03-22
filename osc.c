@@ -59,30 +59,25 @@ static struct ctrl_param_group detune_ctrls = {
 
 static struct ctrl_param_group *param_groups[MAX_GROUPS] = {&detune_ctrls, &pwm_ctrls};
 
-static float render_pulse(const long long current_frame, float *period_pos, const SDL_AudioSpec *spec, float freq,
-                          float width)
+static float render_pulse(const long long current_frame, const SDL_AudioSpec *spec, float freq, float width)
 {
-    *period_pos += freq / spec->freq;
-    if (*period_pos > 1.0)
-    {
-        *period_pos -= 1.0;
-    }
+    float t = (double)current_frame / spec->freq;
+    float periods = t * freq;
+    float period_pos = modff(periods, &t);
 
-    if (*period_pos > width)
+    if (period_pos > width)
         return -1.0;
     else
         return 1.0;
 }
 
-static float render_saw(const long long current_frame, float *period_pos, const SDL_AudioSpec *spec, float freq)
+static float render_saw(const long long current_frame, const SDL_AudioSpec *spec, float freq)
 {
-    *period_pos += freq / spec->freq;
-    if (*period_pos > 1.0)
-    {
-        *period_pos -= 1.0;
-    }
+    float t = (double)current_frame / spec->freq;
+    float periods = t * freq;
+    float period_pos = modff(periods, &t);
 
-    return -1.0 + 2.0 * *period_pos;
+    return -1.0 + 2.0 * period_pos;
 }
 
 float osc_render_sample(long long current_frame, struct osc_state *state, const SDL_AudioSpec *spec, int key,
@@ -100,9 +95,9 @@ float osc_render_sample(long long current_frame, struct osc_state *state, const 
         float freq = key_to_freq[key][detune_cents + osc * (int)osc_detune_step.value];
 
         if (type == OSC_TYPE_PULSE)
-            sample += 1.0 / NBR_VOICES * render_pulse(current_frame, &state->period_position[osc], spec, freq, width);
+            sample += 1.0 / NBR_VOICES * render_pulse(current_frame, spec, freq, width);
         else if (type == OSC_TYPE_SAW)
-            sample += 1.0 / NBR_VOICES * render_saw(current_frame, &state->period_position[osc], spec, freq);
+            sample += 1.0 / NBR_VOICES * render_saw(current_frame, spec, freq);
         else
         {
             fprintf(stderr, "Invalid oscillator type %d\n", type);

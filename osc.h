@@ -14,7 +14,6 @@ enum osc_type
 
 struct osc_state
 {
-    float period_position[MAX_OSC_COUNT];
 };
 
 float osc_render_sample(long long current_frame, struct osc_state *state, const SDL_AudioSpec *spec, int key,

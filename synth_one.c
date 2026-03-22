@@ -494,11 +494,13 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
                     voice->key = 0;
             }
             // filter
-            int cut_freq = min(17000, max(50, key_to_cutoff.value * key_to_freq[voice->key][0] + cutoff.value +
-                                                  env_to_cutoff.value * (envelope_get(&voice->env, A.value, D.value,
-                                                                                     S.value, R.value, current_frame)-S.value) +
-                                                  cutoff_lfo_amp.value * cosine_render_sample(current_frame, spec,
-                                                                                              cutoff_lfo_freq.value)));
+            int cut_freq = min(
+                17000,
+                max(50,
+                    key_to_cutoff.value * key_to_freq[voice->key][0] + cutoff.value +
+                        env_to_cutoff.value *
+                            (envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame) - S.value) +
+                        cutoff_lfo_amp.value * cosine_render_sample(current_frame, spec, cutoff_lfo_freq.value)));
             low_pass_filter_configure(&voice->filter, cut_freq, resonance.value, spec->freq);
             raw_sample = low_pass_filter_get_output(&voice->filter, raw_sample);
             // distort
@@ -966,10 +968,10 @@ int main(int argc, char **argv)
                 else
                     osc_move(event.motion.x, event.motion.y);
             }
-	    else if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
-		    synth_abort = true;
-	    }
-
+            else if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED)
+            {
+                synth_abort = true;
+            }
         }
 
         struct midi_message msg;
