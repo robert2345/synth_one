@@ -1,18 +1,14 @@
 #include "osc.h"
 #include "cosine.h"
 #include "linear_control.h"
+#include "osc.h"
 #include "slide_controller.h"
 #include "text.h"
 #include "util.h"
 #include <stdio.h>
 
-#define MAX_OSC_COUNT (4) // per voice
-
 #define MAX_WIDTH (0.99)
 #define MIN_WIDTH (0.01)
-#define MAX_GROUPS (3)
-
-static struct slide_controller *slc_arr[MAX_PARAMS_PER_GROUP * MAX_GROUPS] = {};
 
 static struct ctrl_param base_width = {
     .label = "PULSE WIDTH",
@@ -32,9 +28,6 @@ static struct ctrl_param pwm_amount = {
     .min = 0.0,
     .max = 0.5,
 };
-static struct ctrl_param_group pwm_ctrls = {
-    .params = {&base_width, &pwm_freq, &pwm_amount},
-};
 
 static struct ctrl_param osc_cnt = {
     .label = "OSC COUNT",
@@ -50,12 +43,6 @@ static struct ctrl_param osc_detune_step = {
     .min = 0,
     .max = 50,
 };
-
-static struct ctrl_param_group detune_ctrls = {
-    .params = {&osc_cnt, &osc_detune_step},
-};
-
-static struct ctrl_param_group *param_groups[MAX_GROUPS] = {&detune_ctrls, &pwm_ctrls};
 
 static float render_pulse(const long long current_frame, const SDL_AudioSpec *spec, float freq, float width)
 {
@@ -82,15 +69,16 @@ float osc_render_sample(long long current_frame, struct osc_state *state, const 
                         enum osc_type type)
 {
     float sample = 0.0;
-    float width = base_width.value + pwm_amount.value * cosine_render_sample(current_frame, spec, pwm_freq.value);
+    float width = state->base_width.value +
+                  state->pwm_amount.value * cosine_render_sample(current_frame, spec, state->pwm_freq.value);
 
     width = max(MIN_WIDTH, width);
     width = min(MAX_WIDTH, width);
 
-    int detune_cents = -((int)osc_cnt.value * osc_detune_step.value) / 2;
-    for (int osc = 0; osc < (int)osc_cnt.value; osc++)
+    int detune_cents = -((int)state->osc_cnt.value * state->osc_detune_step.value) / 2;
+    for (int osc = 0; osc < (int)state->osc_cnt.value; osc++)
     {
-        float freq = key_to_freq[key][detune_cents + osc * (int)osc_detune_step.value];
+        float freq = key_to_freq[key][detune_cents + osc * (int)state->osc_detune_step.value];
 
         if (type == OSC_TYPE_PULSE)
             sample += 1.0 / NBR_VOICES * render_pulse(current_frame, spec, freq, width);
@@ -112,37 +100,37 @@ void osc_draw(struct osc_state *state, SDL_Renderer *renderer)
     SDL_SetRenderDrawColor(renderer, 200, 100, 200, 00);
     SDL_RenderRect(renderer, &state->location);
 
-    for (i = 0; (slc = slc_arr[i]); i++)
+    for (i = 0; (slc = state->slc_arr[i]); i++)
     {
         slide_controller_draw(renderer, slc);
     }
 }
 
-void osc_click(int x, int y)
+void osc_click(struct osc_state *state, int x, int y)
 {
     int i;
     struct slide_controller *slc;
-    for (i = 0; (slc = slc_arr[i]); i++)
+    for (i = 0; (slc = state->slc_arr[i]); i++)
     {
         slide_controller_click(slc, x, y);
     }
 }
 
-void osc_unclick()
+void osc_unclick(struct osc_state *state)
 {
     int i;
     struct slide_controller *slc;
-    for (i = 0; (slc = slc_arr[i]); i++)
+    for (i = 0; (slc = state->slc_arr[i]); i++)
     {
         slide_controller_unclick(slc);
     }
 }
 
-void osc_move(int x, int y)
+void osc_move(struct osc_state *state, int x, int y)
 {
     int i;
     struct slide_controller *slc;
-    for (i = 0; (slc = slc_arr[i]); i++)
+    for (i = 0; (slc = state->slc_arr[i]); i++)
     {
         slide_controller_move(slc, x, y);
     }
@@ -166,12 +154,12 @@ void osc_relocate(struct osc_state *state, int x_in, int y_in, int width, int he
     int tot_height = ctrl_height + label_height;
     int x = margin;
     int y = margin;
-    while ((pg = param_groups[i++]))
+    while ((pg = state->param_groups[i++]))
     {
         j = 0;
         while ((p = pg->params[j++]))
         {
-            struct slide_controller *slc = slc_arr[k++];
+            struct slide_controller *slc = state->slc_arr[k++];
             x = x_in + margin + (y + y_in) / (height - tot_height) * (ctrl_width + margin);
             int y_to_set = y_in + y % (height - tot_height);
             slide_controller_relocate(slc, x, y_to_set, ctrl_width, ctrl_height);
@@ -191,6 +179,25 @@ void osc_init(struct osc_state *state, int x_in, int y_in, int width, int height
     {
         memset(state, 0, sizeof(*state));
     }
+
+    // Init the parameters
+    state->base_width = base_width;
+    state->pwm_freq = pwm_freq;
+    state->pwm_amount = pwm_amount;
+    state->osc_cnt = osc_cnt;
+    state->osc_detune_step = osc_detune_step;
+
+    // init the parameter groups
+    state->pwm_ctrls.params[0] = &state->base_width;
+    state->pwm_ctrls.params[1] = &state->pwm_freq;
+    state->pwm_ctrls.params[2] = &state->pwm_amount;
+    state->detune_ctrls.params[0] = &state->osc_cnt;
+    state->detune_ctrls.params[1] = &state->osc_detune_step;
+
+    // list all   groups
+    state->param_groups[0] = &state->detune_ctrls;
+    state->param_groups[1] = &state->pwm_ctrls;
+
     // Initialize all the actual controllers
     {
         int i = 0;
@@ -200,16 +207,17 @@ void osc_init(struct osc_state *state, int x_in, int y_in, int width, int height
         const int ctrl_height = 10;
         struct ctrl_param_group *pg;
         struct ctrl_param *p;
-        while ((pg = param_groups[i++]))
+        while ((pg = state->param_groups[i++]))
         {
             j = 0;
             while ((p = pg->params[j++]))
             {
-                slc_arr[k++] = slide_controller_create(
+                state->slc_arr[k++] = slide_controller_create(
                     0, 0, 100, 10, (struct linear_control){&p->value, p->min, p->max, p->quantized_to_int, p->show_num},
                     p->label);
             }
         }
     }
+
     osc_relocate(state, x_in, y_in, width, height);
 }

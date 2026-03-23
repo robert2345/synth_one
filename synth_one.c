@@ -40,6 +40,7 @@
 
 #define NBR_BALLS (20)
 
+static SDL_FRect main_location;
 static bool synth_abort = false;
 struct osc_state saw_state;
 struct osc_state pulse_state;
@@ -623,6 +624,14 @@ static void trigger_draw_video_event(union sigval)
     SDL_PushEvent(&user_event);
 }
 
+static void main_relocate(int x, int y, int w, int h)
+{
+    main_location.x = x;
+    main_location.y = y;
+    main_location.w = w;
+    main_location.h = h;
+}
+
 static void draw_waveform(SDL_Renderer *renderer)
 {
     int i;
@@ -630,13 +639,18 @@ static void draw_waveform(SDL_Renderer *renderer)
 
     // draw every 5:th pixel of the window in x
 
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&mutex); // TODO: Is the locking really good? Think this through!
     if (waveform_written == WAVEFORM_LEN)
     {
         struct square_controller *sqc;
         struct slide_controller *slc;
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
+
+        // Draw bounding box
+        SDL_SetRenderDrawColor(renderer, 100, 180, 210, 100);
+        SDL_RenderRect(renderer, &main_location);
+
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         SDL_RenderLines(renderer, points, WIDTH / X_STEP);
 
@@ -651,19 +665,9 @@ static void draw_waveform(SDL_Renderer *renderer)
 
         sequencer_draw(renderer);
 
-        switch ((int)osc_type.value)
-        {
-        case OSC_TYPE_FM:
-            fm_draw(renderer);
-            break;
-        case OSC_TYPE_PULSE:
-            osc_draw(&pulse_state, renderer);
-        case OSC_TYPE_SAW:
-            osc_draw(&saw_state, renderer);
-            break;
-        default:
-            fprintf(stderr, "Invalid oscillator type\n");
-        }
+        fm_draw(renderer);
+        osc_draw(&pulse_state, renderer);
+        osc_draw(&saw_state, renderer);
 
         SDL_RenderPresent(renderer);
         waveform_written = 0;
@@ -721,6 +725,17 @@ static int setup_video_timer(timer_t *t)
     return 0;
 }
 
+static void relocate(int w, int h)
+{
+    const int main_width = 300;
+
+    main_relocate(0, 0, main_width, h);
+    osc_relocate(&saw_state, main_width, 0, (w - main_width) / 2, 200);
+    osc_relocate(&pulse_state, main_width + (w - main_width) / 2, 0, (w - main_width) / 2, 200);
+    fm_relocate(main_width, 200, w - main_width, h - 300);
+    sequencer_relocate(main_width, h - 100, w - main_width, 100);
+}
+
 int main(int argc, char **argv)
 {
     SDL_AudioDeviceID devId;
@@ -739,10 +754,10 @@ int main(int argc, char **argv)
     signal(SIGINT, sig_handler);
 
     // VIDEO STUFF
-    window = SDL_CreateWindow("Synth One",      // window title
-                              WIDTH,            // width, in pixels
-                              HEIGHT,           // height, in pixels
-                              SDL_WINDOW_VULKAN // flags - see below
+    window = SDL_CreateWindow("Synth One",                             // window title
+                              WIDTH,                                   // width, in pixels
+                              HEIGHT,                                  // height, in pixels
+                              SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE // flags - see below
     );
     if (!window)
     {
@@ -778,7 +793,7 @@ int main(int argc, char **argv)
             j = 0;
             while ((p = pg->params[j++]))
             {
-                x = margin + y / (HEIGHT - tot_height) * (WIDTH - 2 * margin - width);
+                x = margin + y / (HEIGHT - tot_height) * (margin + width);
                 struct linear_control placeholder = {&p->value, p->min, p->max, p->quantized_to_int};
                 slc_arr[k++] = slide_controller_create(x, y % (HEIGHT - tot_height), width, height,
                                                        (struct linear_control)placeholder, p->label);
@@ -793,11 +808,14 @@ int main(int argc, char **argv)
         return res;
 
     // initialization of sub modules
-    fm_init(200, 200, 800, 600);
-    osc_init(&saw_state, 200, 0, 800, 200);
-    osc_init(&pulse_state, 200, 0, 800, 200);
+    main_relocate(0, 0, 300, HEIGHT);
+    osc_init(&saw_state, 300, 0, (WIDTH - 300) / 2, 200);
+    osc_init(&pulse_state, 300 + (WIDTH - 300) / 2, 0, (WIDTH - 200) / 2, 200);
+    fm_init(300, 200, WIDTH - 300, HEIGHT - 300);
+    sequencer_init(300, HEIGHT - 100, WIDTH - 300, 100, note_change);
     delay_init(&input_spec, MAX_DELAY_MS);
-    sequencer_init(note_change);
+
+    relocate(WIDTH, HEIGHT);
 
     // MIDI STUFF
     snd_rawmidi_t *midi_in = midi_start();
@@ -937,10 +955,9 @@ int main(int argc, char **argv)
                     slide_controller_click(slc, event.button.x, event.button.y);
                 }
 
-                if (osc_type.value == OSC_TYPE_FM)
-                    fm_click(event.button.x, event.button.y);
-                else
-                    osc_click(event.button.x, event.button.y);
+                fm_click(event.button.x, event.button.y);
+                osc_click(&saw_state, event.button.x, event.button.y);
+                osc_click(&pulse_state, event.button.x, event.button.y);
             }
             else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP)
             {
@@ -956,10 +973,9 @@ int main(int argc, char **argv)
                     slide_controller_unclick(slc);
                 }
 
-                if (osc_type.value == OSC_TYPE_FM)
-                    fm_unclick();
-                else
-                    osc_unclick();
+                fm_unclick();
+                osc_unclick(&saw_state);
+                osc_unclick(&pulse_state);
             }
             else if (event.type == SDL_EVENT_MOUSE_MOTION)
             {
@@ -974,10 +990,15 @@ int main(int argc, char **argv)
                 {
                     slide_controller_move(slc, event.motion.x, event.motion.y);
                 }
-                if (osc_type.value == OSC_TYPE_FM)
-                    fm_move(event.motion.x, event.motion.y);
-                else
-                    osc_move(event.motion.x, event.motion.y);
+                fm_move(event.motion.x, event.motion.y);
+                osc_move(&saw_state, event.motion.x, event.motion.y);
+                osc_move(&pulse_state, event.motion.x, event.motion.y);
+            }
+            else if (event.type == SDL_EVENT_WINDOW_RESIZED)
+            {
+                int w = event.window.data1;
+                int h = event.window.data2;
+                relocate(w, h);
             }
             else if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED)
             {

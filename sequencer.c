@@ -14,6 +14,7 @@ struct step
     SDL_FPoint points[5];
 };
 
+static SDL_FRect sequencer_location;
 static struct step steps[NBR_STEPS];
 static SDL_FPoint big_square[5];
 
@@ -34,6 +35,14 @@ static int steps_per_beat = 4;
 void sequencer_draw(SDL_Renderer *renderer)
 {
     int i = 0;
+
+    // Draw bounding box
+    SDL_SetRenderDrawColor(renderer, 50, 200, 150, 200);
+    SDL_RenderRect(renderer, &sequencer_location);
+
+    text_draw(renderer, "SEQUENCER - ESC TOGGLES EDIT - SPACE TOGGLES RUN", sequencer_location.x + MARGIN,
+              sequencer_location.y + MARGIN, false);
+
     for (i = 0; i < NBR_STEPS; i++)
     {
         struct step *step = &steps[i];
@@ -91,16 +100,19 @@ static int setup_timer()
     return 0;
 }
 
-void sequencer_init(void (*callback)(int on_key, int off_key))
+void sequencer_relocate(int x, int y, int w, int h)
 {
     int i = 0;
-    int x = 650;
-    int y = 450;
     const int width = MARGIN * 2 + 2 * text_get_width();
     const int height = MARGIN * 2 + text_get_height();
     const int spacing = 2;
+    sequencer_location.x = x;
+    sequencer_location.y = y;
+    sequencer_location.w = w;
+    sequencer_location.h = h;
 
-    note_change_cb = callback;
+    y += (2 * text_get_height()); // Make room for a label.
+    x += text_get_width();
 
     big_square[0].x = x - MARGIN;
     big_square[0].y = y - MARGIN;
@@ -129,6 +141,12 @@ void sequencer_init(void (*callback)(int on_key, int off_key))
 
         x += width + spacing;
     }
+}
+
+void sequencer_init(int x, int y, int w, int h, void (*callback)(int on_key, int off_key))
+{
+    sequencer_relocate(x, y, w, h);
+    note_change_cb = callback;
     setup_timer();
 }
 
