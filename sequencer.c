@@ -21,6 +21,8 @@ void (*note_change_cb)(int on_key, int off_key);
 
 static int step_idx = 0;
 static timer_t sequencer_timer;
+struct itimerspec timer_run_spec;
+struct itimerspec timer_stop_spec = {};
 static bool edit = false;
 static bool run = false;
 static bool running = false;
@@ -76,8 +78,8 @@ static int setup_timer()
     struct sigevent sevnt = {.sigev_notify = SIGEV_THREAD, .sigev_notify_function = step};
 
     float steps_per_second = bpm / 60 * steps_per_beat;
-    struct itimerspec new_value = {.it_interval = {.tv_nsec = 1000000000 / steps_per_second}};
-    new_value.it_value = new_value.it_interval;
+    timer_run_spec = (struct itimerspec){.it_interval = {.tv_nsec = 1000000000 / steps_per_second}};
+    timer_run_spec.it_value = timer_run_spec.it_interval;
 
     int ret = timer_create(CLOCK_MONOTONIC, &sevnt, &sequencer_timer);
     if (ret)
@@ -85,8 +87,6 @@ static int setup_timer()
         perror("Failed to create sequencer timer!");
         return -1;
     }
-
-    timer_settime(sequencer_timer, 0, &new_value, NULL);
 
     return 0;
 }
@@ -135,6 +135,10 @@ void sequencer_init(void (*callback)(int on_key, int off_key))
 void sequencer_toggle_run()
 {
     run = !run;
+    if (run)
+        timer_settime(sequencer_timer, 0, &timer_run_spec, NULL);
+    else
+        timer_settime(sequencer_timer, 0, &timer_stop_spec, NULL);
 }
 
 void sequencer_toggle_edit()
