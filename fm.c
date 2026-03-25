@@ -21,11 +21,11 @@ enum op_param
 };
 
 #define NBR_OPS (8)
-#define MAX_GROUPS (NBR_OPS + 2) // choose algo and # operators.
+#define MAX_GROUPS (NBR_OPS + 4) // choose algo and # operators.
 
 static SDL_FRect fm_location;
 
-static struct slide_controller *slc_arr[MAX_PARAMS_PER_GROUP * MAX_GROUPS] = {};
+static struct slide_controller *slc_arr[MAX_GROUPS][MAX_PARAMS_PER_GROUP] = {};
 
 static struct ctrl_param_group *param_groups[MAX_GROUPS];
 
@@ -126,7 +126,7 @@ struct algorithm
 {
     int nbr_carriers;
     int carriers[NBR_OPS];
-    struct operator ops[NBR_OPS]; // this will host all the operators (except carriers) regardless of how they are
+    struct operator ops[NBR_OPS]; // this will host all the operators regardless of how they are
                                   // connected. Index +1 will be op number
 };
 
@@ -217,7 +217,6 @@ void fm_relocate(int x_in, int y_in, int width, int height)
     fm_location.h = height;
     int i = 0;
     int j = 0;
-    int k = 0;
     struct ctrl_param_group *pg;
     struct ctrl_param *p;
     const int margin = 10;
@@ -227,12 +226,11 @@ void fm_relocate(int x_in, int y_in, int width, int height)
     int tot_height = ctrl_height + label_height;
     int x = margin;
     int y = margin;
-    while ((pg = param_groups[i++]))
+    for (i = 0; (pg = param_groups[i]); i++)
     {
-        j = 0;
-        while ((p = pg->params[j++]))
+        for (j = 0; (p = pg->params[j]); j++)
         {
-            struct slide_controller *slc = slc_arr[k++];
+            struct slide_controller *slc = slc_arr[i][j];
             x = x_in + margin + (y + y_in) / (height - tot_height) * (ctrl_width + margin);
             int y_to_set = y_in + y % (height - tot_height);
             slide_controller_relocate(slc, x, y_to_set, ctrl_width, ctrl_height);
@@ -247,6 +245,7 @@ void fm_init(int x_in, int y_in, int width, int height)
     int i, j = 0;
 
     // Initialize all the parameters for the operators so they can be drawn and tweaked.
+    param_groups[0] = &algorithm_group;
     for (i = 0; i < NBR_OPS; i++)
     {
         for (j = 0; j < OP_PARAM_NBR_OF; j++)
@@ -263,9 +262,8 @@ void fm_init(int x_in, int y_in, int width, int height)
                        &ops[OP_PARAM_A + i * OP_PARAM_NBR_OF], &ops[OP_PARAM_D + i * OP_PARAM_NBR_OF],
                        &ops[OP_PARAM_S + i * OP_PARAM_NBR_OF], &ops[OP_PARAM_R + i * OP_PARAM_NBR_OF]},
         };
-        param_groups[i] = &ops_param_groups[i];
+        param_groups[i + 1] = &ops_param_groups[i];
     };
-    param_groups[i] = &algorithm_group;
 
     // Initialize all the actual controllers
     {
@@ -276,12 +274,11 @@ void fm_init(int x_in, int y_in, int width, int height)
         const int ctrl_height = 10;
         struct ctrl_param_group *pg;
         struct ctrl_param *p;
-        while ((pg = param_groups[i++]))
+        for (; (pg = param_groups[i]); i++)
         {
-            j = 0;
-            while ((p = pg->params[j++]))
+            for (j = 0; (p = pg->params[j]); j++)
             {
-                slc_arr[k++] = slide_controller_create(
+                slc_arr[i][j] = slide_controller_create(
                     0, 0, 10, 10, (struct linear_control){&p->value, p->min, p->max, p->quantized_to_int, p->show_num},
                     p->label);
             }
@@ -362,24 +359,51 @@ void draw_operator_connections(SDL_Renderer *renderer, struct algorithm *algo, i
     }
 }
 
+static int fm_get_nbr_active_operators()
+{
+    int i = 0;
+    struct algorithm *algo = &algos[(int)algorithm.value];
+    int max_op = algo->nbr_carriers;
+
+    for (int i = 0; i < NBR_OPS; i++)
+    {
+        for (int j = 0; j < NBR_OPS; j++)
+            max_op = max(max_op, algo->ops[i].input_ops[j]);
+    }
+
+    return max_op;
+}
+
 void fm_draw(SDL_Renderer *renderer)
 {
-    int i;
+    int i = 0;
+    int j = 0;
     struct slide_controller *slc;
 
     SDL_SetRenderDrawColor(renderer, 123, 234, 012, 123);
     SDL_RenderRect(renderer, &fm_location);
 
-    for (i = 0; (slc = slc_arr[i]); i++)
+    i = 0;
+    for (j = 0; (slc = slc_arr[i][j]); j++)
     {
         slide_controller_draw(renderer, slc);
+    }
+
+    int ops = fm_get_nbr_active_operators();
+
+    for (i = 1; i <= ops; i++)
+    {
+        for (j = 0; (slc = slc_arr[i][j]); j++)
+        {
+            slide_controller_draw(renderer, slc);
+        }
     }
 
     SDL_FPoint op_positions[NBR_OPS];
 
     struct algorithm *algo = &algos[(int)algorithm.value];
     float right_most = OP_START_X;
-    for (int i = 0; i < algo->nbr_carriers; i++)
+    for (i = 0; i < algo->nbr_carriers; i++)
     {
         draw_operator(renderer, algo, algo->carriers[i], op_positions, right_most, &right_most, OP_START_Y);
         right_most += OP_WIDTH * 2;
@@ -406,43 +430,61 @@ void fm_draw(SDL_Renderer *renderer)
 void fm_click(int x, int y)
 {
     int i;
+    int j;
     struct slide_controller *slc;
-    for (i = 0; (slc = slc_arr[i]); i++)
+    for (i = 0, j = 0; (slc = slc_arr[i][j]); i++)
     {
-        slide_controller_click(slc, x, y);
+        for (; (slc = slc_arr[i][j]); j++)
+        {
+            slide_controller_click(slc, x, y);
+        }
+        j = 0;
     }
 }
 
 void fm_unclick()
 {
     int i;
+    int j;
     struct slide_controller *slc;
-    for (i = 0; (slc = slc_arr[i]); i++)
+    for (i = 0, j = 0; (slc = slc_arr[i][j]); i++)
     {
-        slide_controller_unclick(slc);
+        for (; (slc = slc_arr[i][j]); j++)
+        {
+            slide_controller_unclick(slc);
+        }
+        j = 0;
     }
 }
 
 void fm_move(int x, int y)
 {
     int i;
+    int j;
     struct slide_controller *slc;
-    for (i = 0; (slc = slc_arr[i]); i++)
+    for (i = 0, j = 0; (slc = slc_arr[i][j]); i++)
     {
-        slide_controller_move(slc, x, y);
+        for (; (slc = slc_arr[i][j]); j++)
+        {
+            slide_controller_move(slc, x, y);
+        }
+        j = 0;
     }
 }
 
 bool fm_read_setting(char *line)
 {
     int i = 0;
+    int j = 0;
+    int k = 0;
+    int l = 0;
     struct ctrl_param_group *pg;
     bool ret = false;
-    while ((pg = param_groups[i++]))
+    for (; (pg = param_groups[i]); i++)
     {
         struct ctrl_param *p;
         int j = 0;
-        while ((p = pg->params[j++]))
+        for (; (p = pg->params[j]); j++)
         {
             int len = strlen(p->label);
             char tmp = line[len];
@@ -457,10 +499,8 @@ bool fm_read_setting(char *line)
                 line[len] = tmp;
                 printf("%s: %s Read %s with value %f\n", __func__, line, p->label, p->value);
                 ret = true;
-                for (s = 0; (slc = slc_arr[s]); s++)
-                {
-                    slide_controller_set_pos_from_value(slc);
-                }
+                slc = slc_arr[i][j];
+                slide_controller_set_pos_from_value(slc);
                 break;
             }
             line[len] = tmp;
