@@ -27,8 +27,7 @@
 
 #define WIDTH (1024)
 #define HEIGHT (768)
-#define X_STEP (1)
-#define WAVEFORM_LEN (WIDTH / X_STEP)
+#define WAVEFORM_LEN (1024)
 
 #define MAX_DELAY_MS (750)
 
@@ -39,6 +38,8 @@
 
 #define NBR_BALLS (20)
 
+int window_width;
+int window_height;
 static SDL_FRect main_location;
 static bool synth_abort = false;
 struct osc_state saw_state;
@@ -274,7 +275,7 @@ static float pianokey_per_scancode[SDL_SCANCODE_COUNT] = {
 
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 static int waveform_written = 0;
-static SDL_FPoint points[WIDTH / X_STEP];
+static SDL_FPoint points[WAVEFORM_LEN];
 static SDL_AudioStream *stream;
 static char *buf;
 static long long current_frame = 0;
@@ -283,7 +284,7 @@ static int buffer_frames;
 static size_t frame_size;
 static int fill_target;
 static int num_frames_to_gen_in_one_go;
-static const SDL_AudioSpec input_spec = {.channels = 1, .format = SDL_AUDIO_S16, .freq = 44100};
+static SDL_AudioSpec input_spec = {.channels = 1, .format = SDL_AUDIO_S16, .freq = 44100};
 
 static size_t calc_frame_size(const SDL_AudioSpec *spec)
 {
@@ -472,7 +473,7 @@ static void notes_off()
     pthread_mutex_unlock(&mutex);
 }
 
-static float render_voice(struct voice *voice, const SDL_AudioSpec *spec)
+static float render_voice(struct voice *voice, long long current_frame, const SDL_AudioSpec *spec)
 {
     float sample = 0.0;
     float freq = key_to_freq[voice->key][0];
@@ -529,7 +530,7 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
         struct voice *voice = &voices[i];
         if (voice->key != 0)
         {
-            sample += render_voice(voice, spec);
+            sample += render_voice(voice, current_frame, spec);
         }
     }
 
@@ -553,11 +554,38 @@ static void write_sample(float sample, char **buf, const SDL_AudioSpec *spec)
     *buf += 2;
 }
 
-static void render_waveform()
+static void render_waveform(union sigval)
 {
-    // render WAVEFORM_LEN frames in points to points so that one period of a voice is shown.
+#define WAVEFORM_KEY 8
+    int i;
+    static struct voice waveform_voice = {
+        .key = 0, // Not initialized - OFF
+    };
+    const float periods = 3;
+    const float periods_per_step = periods / WAVEFORM_LEN;
+    const float step_size = 1.0 * window_width / WAVEFORM_LEN;
+    const float freq = key_to_freq[WAVEFORM_KEY][0];
+    const float frames_per_period = input_spec.freq / freq;
+    const float frames_per_step = frames_per_period * periods_per_step;
+    if (waveform_voice.key == 0)
+    {
+        envelope_init(&waveform_voice.env, &input_spec);
+        /* just set open filter */
+        low_pass_filter_init(&waveform_voice.filter, 0, 20000, input_spec.freq);
+        envelope_start(&waveform_voice.env, 0);
+        waveform_voice.released = INT64_MAX;
+        waveform_voice.pressed = 1;
+        waveform_voice.key = WAVEFORM_KEY;
+    }
 
-    waveform_written = WAVEFORM_LEN;
+    int frame = floorf(current_frame / frames_per_period) * frames_per_period;
+    for (i = 0; i < WAVEFORM_LEN; i++)
+    {
+        frame += frames_per_step;
+
+        points[i].x = i * window_width / WAVEFORM_LEN;
+        points[i].y = 0.5 * window_height * (1 + render_voice(&waveform_voice, input_spec.freq + frame, &input_spec));
+    }
 }
 
 static bool render_sample_frames(long long *current_frame, int frames, char *buf, const SDL_AudioSpec *spec)
@@ -645,17 +673,15 @@ static void draw(SDL_Renderer *renderer)
 
     // draw every 5:th pixel of the window in x
 
-    pthread_mutex_lock(&mutex); // TODO: Is the locking really good? Think this through!
-    if (waveform_written == WAVEFORM_LEN)
-    {
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-        SDL_RenderLines(renderer, points, WIDTH / X_STEP);
-    }
-
     struct square_controller *sqc;
     struct slide_controller *slc;
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
+
+    pthread_mutex_lock(&mutex); // TODO: Is the locking really good? Think this through!
+
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_RenderLines(renderer, points, WAVEFORM_LEN);
 
     // Draw bounding box
     SDL_SetRenderDrawColor(renderer, 100, 180, 210, 100);
@@ -712,10 +738,6 @@ static int setup_video_timer(timer_t *t)
     int i;
     struct sigevent sevnt = {.sigev_notify = SIGEV_THREAD, .sigev_notify_function = trigger_draw_video_event};
 
-    // initialize the points that shall be drawn
-    for (i = 0; i < WAVEFORM_LEN; i++)
-        points[i].x = i * X_STEP;
-
     struct itimerspec new_value = {.it_interval = {.tv_nsec = 100000000ull / 8}};
     new_value.it_value = new_value.it_interval;
 
@@ -731,9 +753,31 @@ static int setup_video_timer(timer_t *t)
     return 0;
 }
 
+static int setup_render_wave_timer(timer_t *t)
+{
+    int i;
+    struct sigevent sevnt = {.sigev_notify = SIGEV_THREAD, .sigev_notify_function = render_waveform};
+    struct itimerspec new_value = {.it_interval = {.tv_nsec = 100000000ull / 8}};
+    new_value.it_value = new_value.it_interval;
+
+    int ret = timer_create(CLOCK_MONOTONIC, &sevnt, t);
+    if (ret)
+    {
+        perror("Failed to create render wave timer!");
+        return -1;
+    }
+
+    timer_settime(*t, 0, &new_value, NULL);
+
+    return 0;
+}
+
 static void relocate(int w, int h)
 {
     const int main_width = 300;
+
+    window_width = w;
+    window_height = h;
 
     main_relocate(0, 0, main_width, h);
     osc_relocate(&saw_state, main_width, 0, (w - main_width) / 2, 200);
@@ -750,6 +794,7 @@ int main(int argc, char **argv)
     SDL_Window *window;
     timer_t audio_timer;
     timer_t video_timer;
+    timer_t render_wave_timer;
 
     if (!SDL_Init(SDL_INIT_EVENTS | SDL_INIT_AUDIO | SDL_INIT_VIDEO))
     {
@@ -844,6 +889,9 @@ int main(int argc, char **argv)
         envelope_init(&voices[i].env, &input_spec);
         low_pass_filter_init(&voices[i].filter, res, cutoff.value, input_spec.freq);
     }
+
+    if (res = setup_render_wave_timer(&render_wave_timer))
+        return res;
 
     int count;
     SDL_AudioDeviceID *ids = SDL_GetAudioPlaybackDevices(&count);
@@ -1032,6 +1080,7 @@ int main(int argc, char **argv)
 
     timer_delete(video_timer);
     timer_delete(audio_timer);
+    timer_delete(render_wave_timer);
 
     SDL_DestroyAudioStream(stream);
     SDL_CloseAudioDevice(devId);
