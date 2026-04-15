@@ -472,6 +472,55 @@ static void notes_off()
     pthread_mutex_unlock(&mutex);
 }
 
+static float render_voice(struct voice *voice, const SDL_AudioSpec *spec)
+{
+    float sample = 0.0;
+    float freq = key_to_freq[voice->key][0];
+    struct osc_state *state;
+    if (fm1.value > 0.5)
+    {
+        // non released not is INT64_MAX cause it was a suitable value here, but 0 makes more sense in the fm
+        // rendering
+        sample = amplitude.value *
+                 fm_render_sample(current_frame - voice->pressed,
+                                  voice->released == INT64_MAX ? 0 : (current_frame - voice->released), spec, freq);
+    }
+    if (pulse1.value > 0.5)
+    {
+        state = &pulse_state;
+        sample += amplitude.value * osc_render_sample(current_frame, state, spec, voice->key);
+    }
+
+    if (saw1.value > 0.5)
+    {
+        state = &saw_state;
+        sample += amplitude.value * osc_render_sample(current_frame, state, spec, voice->key);
+    }
+
+    // envelope
+    if (env_to_amp.value > 0.5)
+    {
+        sample = sample * envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame);
+    }
+    else
+    {
+        if (0.0 == envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame))
+            voice->key = 0;
+    }
+    // filter
+    int cut_freq =
+        min(17000,
+            max(50, key_to_cutoff.value * key_to_freq[voice->key][0] + cutoff.value +
+                        env_to_cutoff.value *
+                            (envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame) - S.value) +
+                        cutoff_lfo_amp.value * cosine_render_sample(current_frame, spec, cutoff_lfo_freq.value)));
+    low_pass_filter_configure(&voice->filter, cut_freq, resonance.value, spec->freq);
+    sample = low_pass_filter_get_output(&voice->filter, sample);
+    // distort
+    sample += distort(sample, dist_level.value, flip_level.value);
+    return sample;
+}
+
 static float render_sample(const long long current_frame, const SDL_AudioSpec *spec)
 {
     float sample = 0.0;
@@ -480,53 +529,7 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
         struct voice *voice = &voices[i];
         if (voice->key != 0)
         {
-            float raw_sample = 0.0;
-            float freq = key_to_freq[voice->key][0];
-            struct osc_state *state;
-            if (fm1.value > 0.5)
-            {
-                // non released not is INT64_MAX cause it was a suitable value here, but 0 makes more sense in the fm
-                // rendering
-                raw_sample =
-                    amplitude.value *
-                    fm_render_sample(current_frame - voice->pressed,
-                                     voice->released == INT64_MAX ? 0 : (current_frame - voice->released), spec, freq);
-            }
-
-            if (pulse1.value > 0.5)
-            {
-                state = &pulse_state;
-                raw_sample += amplitude.value * osc_render_sample(current_frame, state, spec, voice->key);
-            }
-
-            if (saw1.value > 0.5)
-            {
-                state = &saw_state;
-                raw_sample += amplitude.value * osc_render_sample(current_frame, state, spec, voice->key);
-            }
-
-            // envelope
-            if (env_to_amp.value > 0.5)
-            {
-                raw_sample = raw_sample * envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame);
-            }
-            else
-            {
-                if (0.0 == envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame))
-                    voice->key = 0;
-            }
-            // filter
-            int cut_freq = min(
-                17000,
-                max(50,
-                    key_to_cutoff.value * key_to_freq[voice->key][0] + cutoff.value +
-                        env_to_cutoff.value *
-                            (envelope_get(&voice->env, A.value, D.value, S.value, R.value, current_frame) - S.value) +
-                        cutoff_lfo_amp.value * cosine_render_sample(current_frame, spec, cutoff_lfo_freq.value)));
-            low_pass_filter_configure(&voice->filter, cut_freq, resonance.value, spec->freq);
-            raw_sample = low_pass_filter_get_output(&voice->filter, raw_sample);
-            // distort
-            sample += distort(raw_sample, dist_level.value, flip_level.value);
+            sample += render_voice(voice, spec);
         }
     }
 
@@ -548,6 +551,13 @@ static void write_sample(float sample, char **buf, const SDL_AudioSpec *spec)
     int16_t *out = (int16_t *)*buf;
     *out = (int16_t)(sample * 0x7FFF);
     *buf += 2;
+}
+
+static void render_waveform()
+{
+    // render WAVEFORM_LEN frames in points to points so that one period of a voice is shown.
+
+    waveform_written = WAVEFORM_LEN;
 }
 
 static bool render_sample_frames(long long *current_frame, int frames, char *buf, const SDL_AudioSpec *spec)
@@ -573,22 +583,6 @@ static bool render_sample_frames(long long *current_frame, int frames, char *buf
             sample = render_sample(*current_frame, spec);
             write_sample(sample, &buf, spec);
         }
-
-        // write to visualisation buffer
-        {
-            int lowest_key = lowest_voice ? lowest_voice->key : 1;
-            int samples_per_period = spec->freq / (key_to_freq[lowest_key][0]);
-            bool period_start = *current_frame % samples_per_period == 0;
-            bool on_grid = (*current_frame % max(1, (samples_per_period / WAVEFORM_LEN)) == 0);
-
-            if ((waveform_written == 0 && period_start) ||
-                (waveform_written > 0 && waveform_written < WAVEFORM_LEN && on_grid))
-            {
-                points[waveform_written].y = HEIGHT / 2 + HEIGHT / 2 * sample;
-                waveform_written++;
-            }
-        }
-
         *current_frame += 1;
     }
 
@@ -644,7 +638,7 @@ static void main_relocate(int x, int y, int w, int h)
     main_location.h = h;
 }
 
-static void draw_waveform(SDL_Renderer *renderer)
+static void draw(SDL_Renderer *renderer)
 {
     int i;
     float time_scale_factor = 3.0;
@@ -654,36 +648,36 @@ static void draw_waveform(SDL_Renderer *renderer)
     pthread_mutex_lock(&mutex); // TODO: Is the locking really good? Think this through!
     if (waveform_written == WAVEFORM_LEN)
     {
-        struct square_controller *sqc;
-        struct slide_controller *slc;
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        SDL_RenderClear(renderer);
-
-        // Draw bounding box
-        SDL_SetRenderDrawColor(renderer, 100, 180, 210, 100);
-        SDL_RenderRect(renderer, &main_location);
-
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         SDL_RenderLines(renderer, points, WIDTH / X_STEP);
-
-        for (i = 0; (sqc = sqc_arr[i]); i++)
-        {
-            square_controller_draw(renderer, sqc);
-        }
-        for (i = 0; (slc = slc_arr[i]); i++)
-        {
-            slide_controller_draw(renderer, slc);
-        }
-
-        sequencer_draw(renderer);
-
-        fm_draw(renderer);
-        osc_draw(&pulse_state, renderer);
-        osc_draw(&saw_state, renderer);
-
-        SDL_RenderPresent(renderer);
-        waveform_written = 0;
     }
+
+    struct square_controller *sqc;
+    struct slide_controller *slc;
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+
+    // Draw bounding box
+    SDL_SetRenderDrawColor(renderer, 100, 180, 210, 100);
+    SDL_RenderRect(renderer, &main_location);
+
+    for (i = 0; (sqc = sqc_arr[i]); i++)
+    {
+        square_controller_draw(renderer, sqc);
+    }
+    for (i = 0; (slc = slc_arr[i]); i++)
+    {
+        slide_controller_draw(renderer, slc);
+    }
+
+    sequencer_draw(renderer);
+
+    fm_draw(renderer);
+    osc_draw(&pulse_state, renderer);
+    osc_draw(&saw_state, renderer);
+
+    SDL_RenderPresent(renderer);
+    waveform_written = 0;
 
     pthread_mutex_unlock(&mutex);
 }
@@ -951,7 +945,7 @@ int main(int argc, char **argv)
             }
             else if (event.type == SDL_EVENT_USER)
             {
-                draw_waveform(renderer);
+                draw(renderer);
             }
             else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
             {
