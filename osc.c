@@ -65,8 +65,7 @@ static float render_saw(const long long current_frame, const SDL_AudioSpec *spec
     return -1.0 + 2.0 * period_pos;
 }
 
-float osc_render_sample(long long current_frame, struct osc_state *state, const SDL_AudioSpec *spec, int key,
-                        enum osc_type type)
+float osc_render_sample(long long current_frame, struct osc_state *state, const SDL_AudioSpec *spec, int key)
 {
     float sample = 0.0;
     float width = state->base_width.value +
@@ -80,13 +79,13 @@ float osc_render_sample(long long current_frame, struct osc_state *state, const 
     {
         float freq = key_to_freq[key][detune_cents + osc * (int)state->osc_detune_step.value];
 
-        if (type == OSC_TYPE_PULSE)
+        if (state->type == OSC_TYPE_PULSE)
             sample += 1.0 / NBR_VOICES * render_pulse(current_frame, spec, freq, width);
-        else if (type == OSC_TYPE_SAW)
+        else if (state->type == OSC_TYPE_SAW)
             sample += 1.0 / NBR_VOICES * render_saw(current_frame, spec, freq);
         else
         {
-            fprintf(stderr, "Invalid oscillator type %d\n", type);
+            fprintf(stderr, "Invalid oscillator type %d\n", state->type);
         }
     }
     return sample;
@@ -169,7 +168,7 @@ void osc_relocate(struct osc_state *state, int x_in, int y_in, int width, int he
     }
 }
 
-void osc_init(struct osc_state *state, int x_in, int y_in, int width, int height)
+void osc_init(struct osc_state *state, enum osc_type type, int x_in, int y_in, int width, int height)
 {
     if (!state)
     {
@@ -186,6 +185,7 @@ void osc_init(struct osc_state *state, int x_in, int y_in, int width, int height
     state->pwm_amount = pwm_amount;
     state->osc_cnt = osc_cnt;
     state->osc_detune_step = osc_detune_step;
+    state->type = type;
 
     // init the parameter groups
     state->pwm_ctrls.params[0] = &state->base_width;

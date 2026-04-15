@@ -33,13 +33,13 @@ struct osc_state
     struct ctrl_param_group *param_groups[MAX_GROUPS];
 };
 
-float osc_render_sample(long long current_frame, struct osc_state *state, const SDL_AudioSpec *spec, int key,
-                        enum osc_type type);
+float osc_render_sample(long long current_frame, struct osc_state *state, const SDL_AudioSpec *spec, int key);
 
-void osc_init(struct osc_state *state, int x_in, int y_in, int width, int height);
+void osc_init(struct osc_state *state, enum osc_type type, int x_in, int y_in, int width, int height);
 
 void osc_draw(struct osc_state *state, SDL_Renderer *renderer);
 
 void osc_click(struct osc_state *state, int x, int y);
 void osc_unclick(struct osc_state *state);
 void osc_move(struct osc_state *state, int x, int y);
+void osc_relocate(struct osc_state *state, int x_in, int y_in, int width, int height);

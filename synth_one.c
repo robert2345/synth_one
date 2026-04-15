@@ -33,7 +33,6 @@
 #define MAX_DELAY_MS (750)
 
 #define LINE_LEN (100)
-
 #define MAX_GROUPS (9)
 
 #define DEFAULT_SETTINGS_FILE_NAME "saved_settings.txt"
@@ -90,11 +89,25 @@ static struct ctrl_param octave = {
     .quantized_to_int = true,
 };
 
-static struct ctrl_param osc_type = {
-    .label = "PULSE/SAW/FM",
-    .value = OSC_TYPE_PULSE,
+static struct ctrl_param pulse1 = {
+    .label = "ENABLE PULSE",
+    .value = 1,
     .min = 0,
-    .max = OSC_TYPE_COUNT - 1,
+    .max = 1,
+    .quantized_to_int = true,
+};
+static struct ctrl_param saw1 = {
+    .label = "ENABLE SAW",
+    .value = 1,
+    .min = 0,
+    .max = 1,
+    .quantized_to_int = true,
+};
+static struct ctrl_param fm1 = {
+    .label = "ENABLE FM",
+    .value = 1,
+    .min = 0,
+    .max = 1,
     .quantized_to_int = true,
 };
 
@@ -220,7 +233,7 @@ static struct ctrl_param chorus_freq = {
 };
 
 static struct ctrl_param_group tone_ctrls = {
-    .params = {&amplitude, &osc_type, &octave, &env_to_amp, NULL},
+    .params = {&amplitude, &pulse1, &saw1, &fm1, &octave, &env_to_amp, NULL},
 };
 
 static struct ctrl_param_group envelope_ctrls = {
@@ -469,7 +482,8 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
         {
             float raw_sample = 0.0;
             float freq = key_to_freq[voice->key][0];
-            if (osc_type.value == OSC_TYPE_FM)
+            struct osc_state *state;
+            if (fm1.value > 0.5)
             {
                 // non released not is INT64_MAX cause it was a suitable value here, but 0 makes more sense in the fm
                 // rendering
@@ -478,19 +492,17 @@ static float render_sample(const long long current_frame, const SDL_AudioSpec *s
                     fm_render_sample(current_frame - voice->pressed,
                                      voice->released == INT64_MAX ? 0 : (current_frame - voice->released), spec, freq);
             }
-            else
+
+            if (pulse1.value > 0.5)
             {
-                struct osc_state *state;
-                if (osc_type.value == OSC_TYPE_SAW)
-                {
-                    state = &saw_state;
-                }
-                else
-                {
-                    state = &pulse_state;
-                }
-                raw_sample =
-                    amplitude.value * osc_render_sample(current_frame, state, spec, voice->key, osc_type.value);
+                state = &pulse_state;
+                raw_sample += amplitude.value * osc_render_sample(current_frame, state, spec, voice->key);
+            }
+
+            if (saw1.value > 0.5)
+            {
+                state = &saw_state;
+                raw_sample += amplitude.value * osc_render_sample(current_frame, state, spec, voice->key);
             }
 
             // envelope
@@ -809,8 +821,8 @@ int main(int argc, char **argv)
 
     // initialization of sub modules
     main_relocate(0, 0, 300, HEIGHT);
-    osc_init(&saw_state, 300, 0, (WIDTH - 300) / 2, 200);
-    osc_init(&pulse_state, 300 + (WIDTH - 300) / 2, 0, (WIDTH - 200) / 2, 200);
+    osc_init(&saw_state, OSC_TYPE_SAW, 300, 0, (WIDTH - 300) / 2, 200);
+    osc_init(&pulse_state, OSC_TYPE_PULSE, 300 + (WIDTH - 300) / 2, 0, (WIDTH - 200) / 2, 200);
     fm_init(300, 200, WIDTH - 300, HEIGHT - 300);
     sequencer_init(300, HEIGHT - 100, WIDTH - 300, 100, note_change);
     delay_init(&input_spec, MAX_DELAY_MS);
