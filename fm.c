@@ -231,7 +231,7 @@ void fm_relocate(int x_in, int y_in, int width, int height)
         for (j = 0; (p = pg->params[j]); j++)
         {
             struct slide_controller *slc = slc_arr[i][j];
-            x = x_in + margin + (y + y_in) / (height - tot_height) * (ctrl_width + margin);
+            x = x_in + margin + (y / (height - tot_height)) * (ctrl_width + margin);
             int y_to_set = y_in + y % (height - tot_height);
             slide_controller_relocate(slc, x, y_to_set, ctrl_width, ctrl_height);
             y += (margin + ctrl_height + label_height);
@@ -398,14 +398,17 @@ void fm_draw(SDL_Renderer *renderer)
             slide_controller_draw(renderer, slc);
         }
     }
+    slc = slc_arr[i - 1][j - 1];
+    float op_start_y = fm_location.y + fm_location.h - OP_WIDTH * 2;
+    float op_start_x = slc->x + slc->width + 10;
 
     SDL_FPoint op_positions[NBR_OPS];
 
     struct algorithm *algo = &algos[(int)algorithm.value];
-    float right_most = OP_START_X;
+    float right_most = op_start_x;
     for (i = 0; i < algo->nbr_carriers; i++)
     {
-        draw_operator(renderer, algo, algo->carriers[i], op_positions, right_most, &right_most, OP_START_Y);
+        draw_operator(renderer, algo, algo->carriers[i], op_positions, right_most, &right_most, op_start_y);
         right_most += OP_WIDTH * 2;
 
         SDL_FPoint *pos = &op_positions[algo->carriers[i] - 1];
